@@ -1,5 +1,5 @@
 {
-    "name": "obsidian-calendar",
+    "name": "lite-calendar",
     "version": "1.0.0",
     "description": "Calendar management plugin for Obsidian with macOS Calendar integration.",
     "main": "main.js",

@@ -1,4 +1,4 @@
-# Obsidian Calendar Plugin
+# Lite Calendar
 
 macOS 系统日历集成插件，使用闪念笔记的交互方式。
 
@@ -21,7 +21,7 @@ macOS 系统日历集成插件，使用闪念笔记的交互方式。
 
 ## 安装
 
-1. 将插件文件复制到 vault 的 `.obsidian/plugins/obsidian-calendar/` 目录
+1. 将插件文件复制到 vault 的 `.obsidian/plugins/lite-calendar/` 目录
 2. 在 Obsidian 设置中启用插件
 3. 首次使用时会请求日历访问权限
 

@@ -1,10 +1,10 @@
 {
-    "id": "obsidian-calendar",
-    "name": "日历事项",
+    "id": "lite-calendar",
+    "name": "Lite Calendar",
     "version": "1.0.0",
     "minAppVersion": "1.2.8",
-    "description": "macOS 系统日历集成，使用闪念笔记的交互方式。",
-    "author": "Your Name",
-    "authorUrl": "https://github.com/yourusername",
+    "description": "macOS Calendar integration with a lightweight, flash-note style interface.",
+    "author": "lizhifeng",
+    "authorUrl": "https://github.com/fengshuzi",
     "isDesktopOnly": true
 }
