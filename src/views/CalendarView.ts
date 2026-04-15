@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Menu, setIcon, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, Menu, Modal, setIcon, Notice } from "obsidian";
 import type CalendarPlugin from "../main";
 import { CalendarEvent } from "../types";
 import { DateTimePickerModal } from "../components/DateTimePicker";
@@ -119,7 +119,7 @@ export class CalendarView extends ItemView {
 
                 timeDisplay.empty();
                 const wrapper = timeDisplay.createDiv({ cls: 'calendar-time-display-inner' });
-                const label = wrapper.createSpan({
+                wrapper.createSpan({
                     text: `📅 ${this.formatDateTime(startTime)} - ${this.formatTime(endTime.toISOString())}`
                 });
                 const clearBtn = wrapper.createEl("button", {
@@ -418,8 +418,6 @@ export class CalendarView extends ItemView {
     private async confirmAndDelete(event: CalendarEvent): Promise<void> {
         // Use a simple modal-based confirmation instead of global confirm()
         const confirmed = await new Promise<boolean>((resolve) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian internal API
-            const { Modal } = require("obsidian") as any;
             const modal = new Modal(this.app);
             modal.titleEl.setText("确认删除");
             modal.contentEl.createEl("p", { text: `确定删除事件"${event.title}"吗？` });

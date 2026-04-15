@@ -30,8 +30,7 @@ export class CalendarStorage {
     }
 
     // ========== JXA 脚本 ==========
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- JXA returns untyped output
-    private async runJXA(script: string): Promise<any> {
+    private async runJXA(script: string): Promise<string | null> {
         if (!this.checkMacOS()) return null;
 
         try {
