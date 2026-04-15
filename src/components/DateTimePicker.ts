@@ -1,6 +1,7 @@
-import { Modal } from "obsidian";
+import { Modal, App } from "obsidian";
 
 export interface DateTimePickerOptions {
+    app: App;
     initialDate?: Date;
     onSelect: (start: Date, end: Date) => void;
     onClose?: () => void;
@@ -12,7 +13,7 @@ export class DateTimePickerModal extends Modal {
     private endInput: HTMLInputElement;
 
     constructor(options: DateTimePickerOptions) {
-        super(app);
+        super(options.app);
         this.options = options;
     }
 

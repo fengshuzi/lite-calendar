@@ -5,8 +5,8 @@ import { CalendarView, VIEW_TYPE_CALENDAR } from "./views/CalendarView";
 export default class CalendarPlugin extends Plugin {
     storage: CalendarStorage;
 
-    async onload(): Promise<void> {
-        console.log("加载日历事项插件 - macOS Calendar 集成");
+    onload(): void {
+        console.debug("加载日历事项插件 - macOS Calendar 集成");
 
         if (!Platform.isMacOS) {
             console.warn("日历事项插件仅支持 macOS 系统");
@@ -19,28 +19,27 @@ export default class CalendarPlugin extends Plugin {
 
         // 添加右侧边栏图标
         this.addRibbonIcon("calendar-days", "日历事项", () => {
-            this.activateView();
+            void this.activateView();
         });
 
         // 添加命令
         this.addCommand({
             id: "open-calendar",
             name: "打开日历事项",
-            callback: () => this.activateView(),
+            callback: () => { void this.activateView(); },
         });
 
         this.addCommand({
             id: "add-event",
             name: "快速添加事件",
             callback: () => {
-                this.activateView();
+                void this.activateView();
             },
         });
     }
 
-    async onunload(): Promise<void> {
-        console.log("卸载日历事项插件");
-        this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALENDAR);
+    onunload(): void {
+        // Do not detach leaves in onunload
     }
 
     async activateView(): Promise<void> {
@@ -51,7 +50,7 @@ export default class CalendarPlugin extends Plugin {
 
         // 获取主编辑区域的 leaf
         const leaf = workspace.getLeaf('tab');
-        
+
         await leaf.setViewState({
             type: VIEW_TYPE_CALENDAR,
             active: true,
