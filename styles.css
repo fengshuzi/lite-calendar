@@ -1,460 +1,481 @@
 /* 主容器 - Thino 风格 */
 .calendar-view {
-    padding: 0;
-    height: 100%;
-    overflow-y: auto;
-    background: var(--background-primary);
+  padding: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--background-primary);
 }
 
 /* 输入区域 - 顶部固定 */
 .calendar-input-area {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: var(--background-primary);
-    border-bottom: 1px solid var(--background-modifier-border);
-    padding: 20px 40px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 20px 40px;
 }
 
 .calendar-input-wrapper {
-    max-width: 900px;
-    margin: 0 auto;
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 12px;
-    padding: 16px;
-    transition: all 0.2s;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .calendar-input-wrapper:focus-within {
-    border-color: var(--interactive-accent);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-input-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
 }
 
 .calendar-input {
-    width: 100%;
-    border: none;
-    background: transparent;
-    resize: none;
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--text-normal);
-    font-family: var(--font-text);
-    outline: none;
-    margin-bottom: 12px;
-    min-height: 40px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  resize: none;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-normal);
+  font-family: var(--font-text);
+  outline: none;
+  margin-bottom: 12px;
+  min-height: 40px;
 }
 
 .calendar-input::placeholder {
-    color: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .calendar-input-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 8px;
-    border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .calendar-input-toolbar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .calendar-select {
-    padding: 6px 12px;
-    border: 1px solid var(--background-modifier-border);
-    background: var(--background-primary);
-    color: var(--text-normal);
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
+  padding: 6px 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
 .calendar-select:hover {
-    border-color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
 }
 
 .calendar-select:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
 }
 
 .calendar-toolbar-btn {
-    padding: 8px;
-    border: 1px solid var(--background-modifier-border);
-    background: var(--background-primary);
-    cursor: pointer;
-    border-radius: 6px;
-    color: var(--text-muted);
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .calendar-toolbar-btn:hover {
-    background: var(--background-modifier-hover);
-    border-color: var(--interactive-accent);
-    color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
 }
 
 .calendar-toolbar-btn.active {
-    background: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-    color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
 .calendar-time-inputs {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .calendar-time-input {
-    flex: 1;
-    padding: 8px 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    background: var(--background-primary);
-    color: var(--text-normal);
-    font-size: 13px;
-    font-family: var(--font-text);
-    transition: all 0.2s;
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+  font-family: var(--font-text);
+  transition: all 0.2s;
 }
 
 .calendar-time-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
 }
 
 .calendar-action-buttons {
-    display: flex;
-    gap: 8px;
+  display: flex;
+  gap: 8px;
 }
 
 .calendar-cancel-btn {
-    padding: 8px 20px;
-    border: none;
-    background: var(--background-secondary);
-    color: var(--text-normal);
-    cursor: pointer;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s;
+  padding: 8px 20px;
+  border: none;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
 }
 
 .calendar-cancel-btn:hover {
-    background: var(--background-modifier-hover);
+  background: var(--background-modifier-hover);
 }
 
 .calendar-submit-btn {
-    padding: 8px 20px;
-    border: none;
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
-    cursor: pointer;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s;
+  padding: 8px 20px;
+  border: none;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
 }
 
 .calendar-submit-btn:hover {
-    background: var(--interactive-accent-hover);
-    transform: translateY(-1px);
+  background: var(--interactive-accent-hover);
+  transform: translateY(-1px);
 }
 
 /* 列表容器 */
 .calendar-list-container {
-    padding: 32px 40px;
-    max-width: 900px;
-    margin: 0 auto;
+  padding: 32px 40px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 /* 空状态 */
 .calendar-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 80px 20px;
-    text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
 }
 
 .calendar-empty-icon {
-    font-size: 64px;
-    margin-bottom: 16px;
-    opacity: 0.5;
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
 .calendar-empty-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-normal);
-    margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin-bottom: 8px;
 }
 
 .calendar-empty-desc {
-    font-size: 14px;
-    color: var(--text-muted);
+  font-size: 14px;
+  color: var(--text-muted);
 }
 
 /* 日期分组 */
 .calendar-day-group {
-    margin-bottom: 32px;
+  margin-bottom: 32px;
 }
 
 .calendar-day-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid var(--background-modifier-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--background-modifier-border);
 }
 
 .calendar-day-label {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-normal);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-normal);
 }
 
 .calendar-day-label-today {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--interactive-accent);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--interactive-accent);
 }
 
 .calendar-day-count {
-    font-size: 13px;
-    color: var(--text-muted);
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 /* 事件列表 */
 .calendar-events-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* 事件项 */
 .calendar-event-item {
-    /* 容器 */
+  /* 容器 */
 }
 
 /* 卡片样式 - Thino 风格 */
 .calendar-event-card {
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 12px;
-    padding: 16px 20px;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .calendar-event-card:hover {
-    border-color: var(--interactive-accent);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    transform: translateY(-2px);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 /* 卡片头部 */
 .calendar-event-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 /* 时间显示 */
 .calendar-event-time {
-    font-size: 13px;
-    color: var(--text-muted);
-    font-weight: 500;
-    font-family: var(--font-monospace);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-family: var(--font-monospace);
 }
 
 /* 日历标签 */
 .calendar-event-badge {
-    font-size: 11px;
-    padding: 3px 8px;
-    background: var(--background-secondary);
-    color: var(--text-muted);
-    border-radius: 4px;
-    font-weight: 500;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 /* 操作按钮 */
 .calendar-event-actions {
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.2s;
-    margin-left: auto;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-left: auto;
 }
 
 .calendar-event-card:hover .calendar-event-actions {
-    opacity: 1;
+  opacity: 1;
 }
 
 .calendar-more-btn {
-    padding: 6px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    border-radius: 6px;
-    color: var(--text-muted);
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .calendar-more-btn:hover {
-    background: var(--background-modifier-hover);
-    color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
 }
 
 /* 卡片内容 */
 .calendar-event-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .calendar-event-title {
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--text-normal);
-    font-weight: 500;
-    word-wrap: break-word;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-normal);
+  font-weight: 500;
+  word-wrap: break-word;
 }
 
 .calendar-event-meta {
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 1.5;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-    .calendar-list-container {
-        padding: 20px 16px;
-    }
-    
-    .calendar-input-area {
-        padding: 16px;
-    }
+  .calendar-list-container {
+    padding: 20px 16px;
+  }
+
+  .calendar-input-area {
+    padding: 16px;
+  }
 }
 
 /* 日期时间选择器样式 */
 .datetime-picker-container {
-    padding: 16px;
+  padding: 16px;
 }
 
 .calendar-container {
-    margin-bottom: 16px;
+  margin-bottom: 16px;
 }
 
 .time-picker-container {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
-    background: var(--background-secondary);
-    border-radius: 8px;
-    margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
 }
 
 .time-label {
-    font-size: 14px;
-    color: var(--text-normal);
-    font-weight: 500;
+  font-size: 14px;
+  color: var(--text-normal);
+  font-weight: 500;
 }
 
 .time-input {
-    flex: 1;
-    padding: 8px 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    background: var(--background-primary);
-    color: var(--text-normal);
-    font-size: 14px;
-    font-family: var(--font-monospace);
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 14px;
+  font-family: var(--font-monospace);
 }
 
 .time-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
 }
 
 .datetime-picker-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .datetime-picker-btn {
-    padding: 8px 20px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
 .datetime-picker-cancel {
-    background: var(--background-secondary);
-    color: var(--text-normal);
+  background: var(--background-secondary);
+  color: var(--text-normal);
 }
 
 .datetime-picker-cancel:hover {
-    background: var(--background-modifier-hover);
+  background: var(--background-modifier-hover);
 }
 
 .datetime-picker-confirm {
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
 .datetime-picker-confirm:hover {
-    background: var(--interactive-accent-hover);
-    transform: translateY(-1px);
+  background: var(--interactive-accent-hover);
+  transform: translateY(-1px);
 }
 
 .calendar-time-display {
-    font-size: 13px;
-    color: var(--text-muted);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+}
+
+.calendar-time-display-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .calendar-time-clear {
-    background: transparent;
-    border: 1px solid var(--background-modifier-border);
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
 }
 
 .calendar-time-clear:hover {
-    background: var(--background-modifier-hover);
-    color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.is-hidden {
+  display: none;
 }
