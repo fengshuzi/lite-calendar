@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "module";
+import { copyFileSync, existsSync, mkdirSync } from "fs";
 
 const prod = process.argv[2] === "production";
 
@@ -32,5 +33,19 @@ esbuild
         sourcemap: prod ? false : "inline",
         treeShaking: true,
         outfile: "dist/main.js",
+    })
+    .then(() => {
+        if (prod) {
+            if (existsSync('assets')) {
+                if (!existsSync('dist/assets')) mkdirSync('dist/assets', { recursive: true });
+                ['wechat-donate.jpg'].forEach(f => {
+                    const src = `assets/${f}`;
+                    if (existsSync(src)) {
+                        copyFileSync(src, `dist/assets/${f}`);
+                        console.log(`Copied ${src} -> dist/assets/${f}`);
+                    }
+                });
+            }
+        }
     })
     .catch(() => process.exit(1));
