@@ -1,16 +1,25 @@
 import { exec } from "child_process";
-import { promisify } from "util";
 import { Notice, Platform } from "obsidian";
 import type { CalendarEvent } from "./types";
 
-// 辅助函数：格式化本地日期为 YYYY-MM-DD（避免 UTC 时区问题）
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-const execAsync = promisify(exec);
+
+const execAsync = (command: string, options: { timeout: number }): Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+        exec(command, options, (err: unknown, stdout: unknown) => {
+            if (err) {
+                reject(err instanceof Error ? err : new Error(String(err)));
+                return;
+            }
+            resolve(typeof stdout === "string" ? stdout : String(stdout));
+        });
+    });
+};
 
 type EventsResult = {
   events: Record<string, CalendarEvent[]>;
@@ -24,7 +33,6 @@ export class CalendarStorage {
     this.isMac = Platform.isMacOS;
   }
 
-  // ========== macOS 检查 ==========
   private checkMacOS(): boolean {
     if (!this.isMac) {
       new Notice("此功能仅支持 macOS 系统");
@@ -33,21 +41,19 @@ export class CalendarStorage {
     return true;
   }
 
-  // ========== JXA 脚本 ==========
   private async runJXA(script: string): Promise<string | null> {
     if (!this.checkMacOS()) return null;
 
     try {
-      // 使用单引号包裹脚本，避免 shell 解析问题
-      const { stdout } = await execAsync(
+      const stdout = await execAsync(
         `osascript -l JavaScript -e '${script}'`,
-        {
-          timeout: 60000,
-        },
+        { timeout: 60000 },
       );
       return stdout.trim();
-    } catch {
-      new Notice("执行日历操作失败");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Calendar] JXA Error:", msg);
+      new Notice(`操作失败: ${msg}`);
       return null;
     }
   }
@@ -126,7 +132,6 @@ export class CalendarStorage {
     );
   }
 
-  // ========== 查询未来3天的日历事件 ==========
   async getEvents(): Promise<{
     events: Record<string, CalendarEvent[]>;
     calendars: string[];
@@ -143,9 +148,8 @@ export class CalendarStorage {
     }
   }
 
-  // ========== 获取所有日历 ==========
   async getCalendars(): Promise<string[]> {
-    const script = `var Calendar=Application("Calendar");JSON.stringify(Calendar.calendars().map(function(c){return c.name();}));`;
+    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var cals=store.calendarsForEntityType(0);var result=[];for(var i=0;i<cals.count;i++){result.push(ObjC.unwrap(cals.objectAtIndex(i).title));}JSON.stringify(result);`;
     const result = await this.runJXA(script);
     if (!result) return [];
 
@@ -156,7 +160,6 @@ export class CalendarStorage {
     }
   }
 
-  // ========== 增 (Create) ==========
   async createEvent(
     calendarName: string,
     title: string,
@@ -176,7 +179,6 @@ export class CalendarStorage {
     return false;
   }
 
-  // ========== 删 (Delete) ==========
   async deleteEvent(eventId: string): Promise<boolean> {
     const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var event=store.eventWithIdentifier("${eventId}");if(!event){"event not found";}else{var error=$();store.removeEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
 
@@ -188,7 +190,6 @@ export class CalendarStorage {
     return false;
   }
 
-  // ========== 改 (Update) ==========
   async updateEvent(
     eventId: string,
     title: string,
@@ -207,7 +208,6 @@ export class CalendarStorage {
     return false;
   }
 
-  // ========== 辅助方法 ==========
   groupEventsByDay(events: Record<string, CalendarEvent[]>): Array<{
     dateKey: string;
     label: string;
@@ -265,6 +265,6 @@ export class CalendarStorage {
     if (dateKey === todayKey) return "今天";
     if (dateKey === tomorrowKey) return "明天";
     if (dateKey === dayAfterKey) return "后天";
-    return dateKey.substring(5); // MM-DD
+    return dateKey.substring(5);
   }
 }

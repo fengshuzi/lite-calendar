@@ -14,6 +14,7 @@ export const VIEW_TYPE_CALENDAR = "calendar-view";
 
 export class CalendarView extends ItemView {
   plugin: CalendarPlugin;
+  private listContainer: HTMLElement | null = null;
   private startEditEvent: ((event: CalendarEvent) => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: CalendarPlugin) {
@@ -42,7 +43,7 @@ export class CalendarView extends ItemView {
   }
 
   render(): void {
-    const container = this.containerEl.children[1] as HTMLElement;
+    const container = this.contentEl;
     container.empty();
     container.addClass("calendar-view");
 
@@ -267,13 +268,13 @@ export class CalendarView extends ItemView {
   }
 
   private renderEventsList(container: HTMLElement): void {
-    const listContainer = container.createDiv("calendar-list-container");
-    listContainer.createDiv({ text: "加载中...", cls: "calendar-loading" });
+    this.listContainer = container.createDiv("calendar-list-container");
+    this.listContainer.createDiv({ text: "加载中...", cls: "calendar-loading" });
 
-    // 异步加载事件
     void this.plugin.storage.getEvents().then(({ events, calendars }) => {
-      listContainer.empty();
-      this.renderEventsContent(events, calendars, listContainer);
+      if (!this.listContainer) return;
+      this.listContainer.empty();
+      this.renderEventsContent(events, calendars, this.listContainer);
     });
   }
 
@@ -287,11 +288,7 @@ export class CalendarView extends ItemView {
     _calendars: string[],
     container?: HTMLElement,
   ): void {
-    const listContainer =
-      container ||
-      (this.containerEl.querySelector(
-        ".calendar-list-container",
-      ) as HTMLElement);
+    const listContainer = container || this.listContainer;
     if (!listContainer) return;
 
     listContainer.empty();

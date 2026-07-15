@@ -1,7 +1,7 @@
 {
   "name": "lite-calendar",
-  "version": "1.0.1",
-  "description": "Calendar management plugin for Obsidian with macOS Calendar integration.",
+  "version": "1.0.2",
+  "description": "macOS Calendar integration with a lightweight, flash-note style interface.",
   "main": "main.js",
   "scripts": {
     "build": "npm run lint && node esbuild.config.mjs production && cp manifest.json styles.css dist/",
@@ -15,34 +15,23 @@
     "release": "node release.mjs"
   },
   "keywords": [
-    "obsidian",
     "calendar",
     "events",
     "macos",
     "productivity"
   ],
-  "author": "Your Name",
+  "author": "lizhifeng",
   "license": "MIT",
   "devDependencies": {
-    "@tsconfig/svelte": "^1.0.13",
-    "@types/node": "^14.14.37",
+    "@types/node": "^20.10.0",
     "@typescript-eslint/eslint-plugin": "^8.58.2",
     "@typescript-eslint/parser": "^8.58.2",
-    "builtin-modules": "^3.2.0",
     "esbuild": "^0.12.26",
-    "esbuild-svelte": "^0.5.4",
     "eslint": "^9.39.4",
-    "eslint-plugin-obsidianmd": "^0.1.9",
-    "obsidian": "latest",
+    "obsidian": "^1.4.16",
     "prettier": "^3.1.0",
-    "svelte-preprocess": "^4.7.0",
-    "tslib": "^2.2.0",
+    "tslib": "^2.6.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.58.2",
-    "@eslint/json": "^0.14.0"
-  },
-  "dependencies": {
-    "obsidian-calendar-ui": "^0.3.12",
-    "svelte": "^3.49.0"
+    "typescript-eslint": "^8.58.2"
   }
 }
