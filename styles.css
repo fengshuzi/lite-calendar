@@ -77,18 +77,22 @@
   align-items: center;
 }
 
-/* Calendar select - pill capsule */
+/* Calendar select - capsule */
 .calendar-select {
-  padding: 8px 16px;
+  padding: 8px 28px 8px 16px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-primary);
   color: var(--text-normal);
-  border-radius: 9999px;
+  border-radius: 11px;
   font-size: 14px;
   font-family: var(--font-text);
   letter-spacing: -0.224px;
   cursor: pointer;
   transition: border-color 0.2s;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-select:hover {
