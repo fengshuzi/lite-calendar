@@ -8,6 +8,7 @@ import {
 } from "obsidian";
 import type CalendarPlugin from "../main";
 import type { CalendarEvent } from "../types";
+import { generateCalendarColor } from "../types";
 import { DateTimePickerModal } from "../components/DateTimePicker";
 
 export const VIEW_TYPE_CALENDAR = "calendar-view";
@@ -66,6 +67,18 @@ export class CalendarView extends ItemView {
 
         this.renderInputArea(container);
         this.renderEventsList(container);
+    }
+
+    private getCalendarColor(calendar: string): string {
+        return this.plugin.settings.calendarColors[calendar] || generateCalendarColor(calendar);
+    }
+
+    private getContrastColor(hex: string): string {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance > 0.5 ? "#000000" : "#ffffff";
     }
 
     private renderInputArea(container: HTMLElement): void {
@@ -450,10 +463,13 @@ export class CalendarView extends ItemView {
             if (startSlot >= slotElements.length || endSlot <= 0) continue;
 
             const eventEl = grid.createDiv("calendar-dayview-event");
+            const eventColor = this.getCalendarColor(event.calendar);
             eventEl.textContent = event.title;
             eventEl.title = `${event.title} · ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`;
             eventEl.style.top = `${(startSlot / slotsPerHour) * 60}px`;
             eventEl.style.height = `${((endSlot - startSlot) / slotsPerHour) * 60}px`;
+            eventEl.style.background = eventColor;
+            eventEl.style.color = this.getContrastColor(eventColor);
 
             eventEl.onclick = (e) => {
                 e.stopPropagation();
@@ -597,8 +613,13 @@ export class CalendarView extends ItemView {
             timeEl.textContent = `${this.formatTime(event.start)} - ${this.formatTime(event.end)}`;
         }
 
+        const calendarColor = this.getCalendarColor(event.calendar);
+
         const calendarBadge = cardHeader.createDiv("calendar-event-badge");
         calendarBadge.textContent = event.calendar;
+        calendarBadge.style.color = calendarColor;
+        calendarBadge.style.borderColor = calendarColor;
+        card.style.borderLeft = `3px solid ${calendarColor}`;
 
         const cardActions = cardHeader.createDiv("calendar-event-actions");
 

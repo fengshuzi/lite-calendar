@@ -3,6 +3,7 @@ import { CalendarStorage } from "./storage";
 import { CalendarView, VIEW_TYPE_CALENDAR } from "./views/CalendarView";
 import { DEFAULT_SETTINGS } from "./types";
 import type { CalendarSettings } from "./types";
+import { generateCalendarColor } from "./types";
 
 export default class CalendarPlugin extends Plugin {
   storage: CalendarStorage;
@@ -51,6 +52,9 @@ export default class CalendarPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     const loaded = (await this.loadData()) as Record<string, unknown> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+    if (!this.settings.calendarColors) {
+      this.settings.calendarColors = {};
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -108,5 +112,34 @@ class CalendarSettingTab extends PluginSettingTab {
             await this.plugin.refreshViews();
           }),
       );
+
+    new Setting(containerEl).setName("日历颜色").setHeading();
+
+    const colorsContainer = containerEl.createDiv();
+    colorsContainer.createEl("p", { text: "加载日历中...", cls: "calendar-settings-hint" });
+
+    void this.plugin.storage.getCalendars().then((calendars) => {
+      colorsContainer.empty();
+      if (calendars.length === 0) {
+        colorsContainer.createEl("p", { text: "未找到日历" });
+        return;
+      }
+
+      for (const calendar of calendars) {
+        const color = this.plugin.settings.calendarColors[calendar] || generateCalendarColor(calendar);
+        new Setting(colorsContainer)
+          .setName(calendar)
+          .setDesc("事件颜色")
+          .addColorPicker((picker) =>
+            picker
+              .setValue(color)
+              .onChange(async (value) => {
+                this.plugin.settings.calendarColors[calendar] = value;
+                await this.plugin.saveSettings();
+                await this.plugin.refreshViews();
+              }),
+          );
+      }
+    });
   }
 }
