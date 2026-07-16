@@ -176,6 +176,8 @@ export class CalendarStorage {
       new Notice("事件已添加");
       return true;
     }
+    console.error("[Calendar] createEvent failed:", result);
+    new Notice(`添加事件失败: ${result || "未知错误"}`);
     return false;
   }
 
@@ -187,24 +189,30 @@ export class CalendarStorage {
       new Notice("事件已删除");
       return true;
     }
+    console.error("[Calendar] deleteEvent failed:", result);
+    new Notice(`删除事件失败: ${result || "未知错误"}`);
     return false;
   }
 
   async updateEvent(
     eventId: string,
+    calendarName: string,
     title: string,
     startISO: string,
     endISO: string,
   ): Promise<boolean> {
     const titleEsc = this.escapeJXA(title);
+    const calNameEsc = this.escapeJXA(calendarName);
 
-    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var event=store.eventWithIdentifier("${eventId}");if(!event){"event not found";}else{event.title=$("${titleEsc}");event.startDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${startISO}").getTime()/1000);event.endDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${endISO}").getTime()/1000);var error=$();store.saveEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
+    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var cals=store.calendarsForEntityType(0);var targetCal=null;for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);if(ObjC.unwrap(cal.title)==="${calNameEsc}"){targetCal=cal;break;}}var event=store.eventWithIdentifier("${eventId}");if(!event){"event not found";}else{event.title=$("${titleEsc}");event.startDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${startISO}").getTime()/1000);event.endDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${endISO}").getTime()/1000);if(targetCal){event.calendar=targetCal;}var error=$();store.saveEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
 
     const result = await this.runJXA(script);
     if (result === "ok") {
       new Notice("事件已更新");
       return true;
     }
+    console.error("[Calendar] updateEvent failed:", result);
+    new Notice(`更新事件失败: ${result || "未知错误"}`);
     return false;
   }
 

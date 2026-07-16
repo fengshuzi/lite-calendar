@@ -192,7 +192,7 @@ export class CalendarView extends ItemView {
                 const endISO = endTime.toISOString();
 
                 if (editingEventId) {
-                    await this.plugin.storage.updateEvent(editingEventId, title, startISO, endISO);
+                    await this.plugin.storage.updateEvent(editingEventId, calendar, title, startISO, endISO);
                 } else {
                     await this.plugin.storage.createEvent(calendar, title, startISO, endISO);
                 }
@@ -232,6 +232,7 @@ export class CalendarView extends ItemView {
         this.startEditEvent = (event: CalendarEvent) => {
             editingEventId = event.id;
             if (this.textarea) this.textarea.value = event.title;
+            if (this.calendarSelectRef) this.calendarSelectRef.value = event.calendar;
             startTime = new Date(event.start);
             endTime = new Date(event.end);
             updateTimeDisplay();
