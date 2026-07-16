@@ -170,9 +170,9 @@ export class CalendarView extends ItemView {
         let editingEventId: string | null = null;
 
         this.cancelBtn.onclick = () => {
-            this.resetComposer();
-            setDefaultTimes();
             editingEventId = null;
+            setDefaultTimes();
+            this.resetComposer();
             this.textarea?.focus();
         };
 
@@ -273,9 +273,12 @@ export class CalendarView extends ItemView {
             this.textarea.style.height = "auto";
             this.textarea.placeholder = "添加日历事件...";
         }
+        if (this.statusHint) {
+            this.statusHint.textContent = "";
+            this.statusHint.addClass("is-hidden");
+        }
         this.timeDisplay?.empty();
         this.timeDisplay?.addClass("is-hidden");
-        this.statusHint?.addClass("is-hidden");
         this.cancelBtn?.addClass("is-hidden");
         this.timeBtn?.removeClass("active");
         if (this.submitBtn) this.submitBtn.textContent = "添加事件";
