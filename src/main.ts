@@ -1,11 +1,16 @@
-import { Notice, Platform, Plugin } from "obsidian";
+import { App, Notice, Platform, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { CalendarStorage } from "./storage";
 import { CalendarView, VIEW_TYPE_CALENDAR } from "./views/CalendarView";
+import { DEFAULT_SETTINGS } from "./types";
+import type { CalendarSettings } from "./types";
 
 export default class CalendarPlugin extends Plugin {
   storage: CalendarStorage;
+  settings: CalendarSettings;
 
-  onload(): void {
+  async onload(): Promise<void> {
+    await this.loadSettings();
+
     if (!Platform.isMacOS) {
       new Notice("日历事项插件仅支持 macOS 系统");
       return;
@@ -39,6 +44,17 @@ export default class CalendarPlugin extends Plugin {
         void this.activateView();
       },
     });
+
+    this.addSettingTab(new CalendarSettingTab(this.app, this));
+  }
+
+  async loadSettings(): Promise<void> {
+    const loaded = (await this.loadData()) as Record<string, unknown> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+  }
+
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
   }
 
   async activateView(): Promise<void> {
@@ -57,5 +73,40 @@ export default class CalendarPlugin extends Plugin {
 
     // 激活这个 leaf
     workspace.setActiveLeaf(leaf, { focus: true });
+  }
+
+  async refreshViews(): Promise<void> {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_CALENDAR)) {
+      if (leaf.view instanceof CalendarView) {
+        await leaf.view.loadAndRender();
+      }
+    }
+  }
+}
+
+class CalendarSettingTab extends PluginSettingTab {
+  plugin: CalendarPlugin;
+
+  constructor(app: App, plugin: CalendarPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    new Setting(containerEl)
+      .setName("显示凌晨时段")
+      .setDesc("在日视图中显示 0:00 至 6:00 的时间轴")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showEarlyHours)
+          .onChange(async (value) => {
+            this.plugin.settings.showEarlyHours = value;
+            await this.plugin.saveSettings();
+            await this.plugin.refreshViews();
+          }),
+      );
   }
 }

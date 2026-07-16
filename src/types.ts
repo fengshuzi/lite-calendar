@@ -8,3 +8,11 @@ export interface CalendarEvent {
     location?: string;
     notes?: string;
 }
+
+export interface CalendarSettings {
+    showEarlyHours: boolean;
+}
+
+export const DEFAULT_SETTINGS: CalendarSettings = {
+    showEarlyHours: false,
+};

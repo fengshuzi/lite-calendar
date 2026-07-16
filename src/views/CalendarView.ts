@@ -402,9 +402,11 @@ export class CalendarView extends ItemView {
         const slotsPerHour = 2;
         const slotMinutes = 60 / slotsPerHour;
         const totalSlots = 24 * slotsPerHour;
+        const showEarlyHours = this.plugin.settings.showEarlyHours;
+        const startSlotOffset = showEarlyHours ? 0 : 6 * slotsPerHour;
 
         const slotElements: HTMLElement[] = [];
-        for (let i = 0; i < totalSlots; i++) {
+        for (let i = startSlotOffset; i < totalSlots; i++) {
             const hour = Math.floor(i / slotsPerHour);
             const minute = (i % slotsPerHour) * slotMinutes;
             const row = grid.createDiv("calendar-dayview-row");
@@ -422,8 +424,8 @@ export class CalendarView extends ItemView {
             slotElements.push(track);
         }
 
-        this.renderDayEvents(grid, slotElements, slotsPerHour, slotMinutes, dayDate);
-        this.attachDayGridInteractions(grid, slotElements, slotsPerHour, slotMinutes, dayDate);
+        this.renderDayEvents(grid, slotElements, slotsPerHour, slotMinutes, dayDate, startSlotOffset, totalSlots);
+        this.attachDayGridInteractions(grid, slotElements, slotsPerHour, slotMinutes, dayDate, startSlotOffset);
     }
 
     private renderDayEvents(
@@ -432,13 +434,19 @@ export class CalendarView extends ItemView {
         slotsPerHour: number,
         slotMinutes: number,
         dayDate: Date,
+        startSlotOffset: number,
+        totalSlots: number,
     ): void {
         const dayStart = dayDate.getTime();
         for (const event of this.dayEvents) {
             const start = new Date(event.start);
             const end = new Date(event.end);
-            const startSlot = Math.max(0, Math.floor((start.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
-            const endSlot = Math.min(slotElements.length, Math.ceil((end.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
+            const actualStartSlot = Math.max(0, Math.floor((start.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
+            const actualEndSlot = Math.min(totalSlots, Math.ceil((end.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
+            if (actualEndSlot <= startSlotOffset) continue;
+
+            const startSlot = Math.max(0, actualStartSlot - startSlotOffset);
+            const endSlot = Math.min(slotElements.length, actualEndSlot - startSlotOffset);
             if (startSlot >= slotElements.length || endSlot <= 0) continue;
 
             const eventEl = grid.createDiv("calendar-dayview-event");
@@ -465,6 +473,7 @@ export class CalendarView extends ItemView {
         slotsPerHour: number,
         slotMinutes: number,
         dayDate: Date,
+        startSlotOffset: number,
     ): void {
         const updateSelection = () => {
             const minSlot = Math.min(this.dragStartSlot, this.dragEndSlot);
@@ -489,7 +498,8 @@ export class CalendarView extends ItemView {
             const rect = grid.getBoundingClientRect();
             const y = clientY - rect.top + grid.scrollTop;
             const slotHeight = rect.height / slotElements.length;
-            return Math.max(0, Math.min(slotElements.length - 1, Math.floor(y / slotHeight)));
+            const visualSlot = Math.max(0, Math.min(slotElements.length - 1, Math.floor(y / slotHeight)));
+            return visualSlot + startSlotOffset;
         };
 
         const commitSelection = () => {
