@@ -22,6 +22,17 @@ export class CalendarView extends ItemView {
     private timeBtn: HTMLButtonElement | null = null;
     private timeDisplay: HTMLElement | null = null;
     private statusHint: HTMLElement | null = null;
+    private mode: "list" | "day" = "list";
+    private currentDay = new Date();
+    private calendarSelectRef: HTMLSelectElement | null = null;
+    private dayViewContainer: HTMLElement | null = null;
+    private dayGridRef: HTMLElement | null = null;
+    private dayEvents: CalendarEvent[] = [];
+    private daySelection: { start: Date; end: Date } | null = null;
+    private dragStartY = 0;
+    private isDragging = false;
+    private dragStartSlot = 0;
+    private dragEndSlot = 0;
 
     constructor(leaf: WorkspaceLeaf, plugin: CalendarPlugin) {
         super(leaf);
@@ -77,6 +88,7 @@ export class CalendarView extends ItemView {
         const toolbar = inputActions.createDiv("calendar-input-toolbar");
 
         const calendarSelect = toolbar.createEl("select", { cls: "calendar-select" });
+        this.calendarSelectRef = calendarSelect;
         void this.plugin.storage.getCalendars().then((calendars) => {
             calendarSelect.empty();
             for (const cal of calendars) {
@@ -126,11 +138,7 @@ export class CalendarView extends ItemView {
         this.timeBtn.title = "选择日期时间";
         this.timeBtn.onclick = () => {
             this.showDateTimePicker(startTime || new Date(), (start, end) => {
-                startTime = start;
-                endTime = end;
-                updateTimeDisplay();
-                this.timeBtn?.addClass("active");
-                this.textarea?.focus();
+                this.applyTimeSelection(start, end);
             });
         };
 
@@ -200,6 +208,14 @@ export class CalendarView extends ItemView {
             this.autoResizeTextarea();
         };
 
+        this.applyTimeSelection = (start: Date, end: Date) => {
+            startTime = start;
+            endTime = end;
+            updateTimeDisplay();
+            this.timeBtn?.addClass("active");
+            this.textarea?.focus();
+        };
+
         this.startEditEvent = (event: CalendarEvent) => {
             editingEventId = event.id;
             if (this.textarea) this.textarea.value = event.title;
@@ -224,6 +240,10 @@ export class CalendarView extends ItemView {
         };
 
         this.autoResizeTextarea();
+    }
+
+    private applyTimeSelection(_start: Date, _end: Date): void {
+        // assigned dynamically in renderInputArea
     }
 
     private autoResizeTextarea(): void {
@@ -285,11 +305,39 @@ export class CalendarView extends ItemView {
 
         listContainer.empty();
 
+        const header = listContainer.createDiv("calendar-view-header");
+        const titleEl = header.createDiv("calendar-view-title");
+        titleEl.textContent = this.mode === "day" ? "日视图" : "日程列表";
+
+        const toggleGroup = header.createDiv("calendar-view-toggle");
+        const listBtn = toggleGroup.createEl("button", { cls: `calendar-toggle-btn ${this.mode === "list" ? "active" : ""}` });
+        setIcon(listBtn, "list");
+        listBtn.title = "列表视图";
+        const dayBtn = toggleGroup.createEl("button", { cls: `calendar-toggle-btn ${this.mode === "day" ? "active" : ""}` });
+        setIcon(dayBtn, "clock");
+        dayBtn.title = "日视图";
+
+        listBtn.onclick = () => {
+            if (this.mode === "list") return;
+            this.mode = "list";
+            void this.loadAndRender();
+        };
+        dayBtn.onclick = () => {
+            if (this.mode === "day") return;
+            this.mode = "day";
+            void this.loadAndRender();
+        };
+
+        if (this.mode === "day") {
+            this.renderDayView(listContainer, events);
+            return;
+        }
+
         const days = this.plugin.storage.groupEventsByDay(events);
 
         if (days.length === 0) {
             const emptyState = listContainer.createDiv({ cls: "calendar-empty-state" });
-            emptyState.createDiv({ text: "📅", cls: "calendar-empty-icon" });
+            emptyState.createDiv({ text: "📅", cls: "calendar-empty-empty-icon" });
             emptyState.createDiv({ text: "未来3天没有日程", cls: "calendar-empty-title" });
             emptyState.createDiv({ text: "在上方输入框开始添加", cls: "calendar-empty-desc" });
             return;
@@ -298,6 +346,204 @@ export class CalendarView extends ItemView {
         for (const day of days) {
             this.renderDayGroup(listContainer, day);
         }
+    }
+
+    private renderDayView(
+        container: HTMLElement,
+        events: Record<string, CalendarEvent[]>,
+    ): void {
+        const dayDate = new Date(this.currentDay);
+        dayDate.setHours(0, 0, 0, 0);
+        const nextDay = new Date(dayDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+
+        const allEvents: CalendarEvent[] = [];
+        for (const [calName, evts] of Object.entries(events)) {
+            for (const evt of evts) {
+                const start = new Date(evt.start);
+                const end = new Date(evt.end);
+                if (start < nextDay && end > dayDate) {
+                    allEvents.push({ ...evt, calendar: calName });
+                }
+            }
+        }
+        this.dayEvents = allEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+        const dayHeader = container.createDiv("calendar-dayview-header");
+        const prevBtn = dayHeader.createEl("button", { cls: "calendar-dayview-nav" });
+        setIcon(prevBtn, "chevron-left");
+        prevBtn.onclick = () => {
+            this.currentDay.setDate(this.currentDay.getDate() - 1);
+            void this.loadAndRender();
+        };
+
+        const dateText = dayHeader.createDiv("calendar-dayview-date");
+        dateText.textContent = this.formatDateLong(dayDate);
+
+        const nextBtn = dayHeader.createEl("button", { cls: "calendar-dayview-nav" });
+        setIcon(nextBtn, "chevron-right");
+        nextBtn.onclick = () => {
+            this.currentDay.setDate(this.currentDay.getDate() + 1);
+            void this.loadAndRender();
+        };
+
+        const todayBtn = dayHeader.createEl("button", { cls: "calendar-dayview-today" });
+        todayBtn.textContent = "今天";
+        todayBtn.onclick = () => {
+            this.currentDay = new Date();
+            void this.loadAndRender();
+        };
+
+        const gridWrapper = container.createDiv("calendar-dayview-grid-wrapper");
+        this.dayViewContainer = gridWrapper;
+        const grid = gridWrapper.createDiv("calendar-dayview-grid");
+        this.dayGridRef = grid;
+
+        const slotsPerHour = 2;
+        const slotMinutes = 60 / slotsPerHour;
+        const totalSlots = 24 * slotsPerHour;
+
+        const slotElements: HTMLElement[] = [];
+        for (let i = 0; i < totalSlots; i++) {
+            const hour = Math.floor(i / slotsPerHour);
+            const minute = (i % slotsPerHour) * slotMinutes;
+            const row = grid.createDiv("calendar-dayview-row");
+            row.dataset.slot = String(i);
+            row.dataset.hour = String(hour);
+            row.dataset.minute = String(minute);
+
+            const label = row.createDiv("calendar-dayview-hour-label");
+            if (i % slotsPerHour === 0) {
+                label.textContent = `${String(hour).padStart(2, "0")}:00`;
+            }
+
+            const track = row.createDiv("calendar-dayview-track");
+            track.dataset.slot = String(i);
+            slotElements.push(track);
+        }
+
+        this.renderDayEvents(grid, slotElements, slotsPerHour, slotMinutes, dayDate);
+        this.attachDayGridInteractions(grid, slotElements, slotsPerHour, slotMinutes, dayDate);
+    }
+
+    private renderDayEvents(
+        grid: HTMLElement,
+        slotElements: HTMLElement[],
+        slotsPerHour: number,
+        slotMinutes: number,
+        dayDate: Date,
+    ): void {
+        const dayStart = dayDate.getTime();
+        for (const event of this.dayEvents) {
+            const start = new Date(event.start);
+            const end = new Date(event.end);
+            const startSlot = Math.max(0, Math.floor((start.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
+            const endSlot = Math.min(slotElements.length, Math.ceil((end.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
+            if (startSlot >= slotElements.length || endSlot <= 0) continue;
+
+            const eventEl = grid.createDiv("calendar-dayview-event");
+            eventEl.textContent = event.title;
+            eventEl.title = `${event.title} · ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`;
+            eventEl.style.top = `${(startSlot / slotsPerHour) * 60}px`;
+            eventEl.style.height = `${((endSlot - startSlot) / slotsPerHour) * 60}px`;
+
+            eventEl.onclick = (e) => {
+                e.stopPropagation();
+                this.startEditEvent?.(event);
+            };
+            eventEl.oncontextmenu = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showContextMenu(e, event);
+            };
+        }
+    }
+
+    private attachDayGridInteractions(
+        grid: HTMLElement,
+        slotElements: HTMLElement[],
+        slotsPerHour: number,
+        slotMinutes: number,
+        dayDate: Date,
+    ): void {
+        const updateSelection = () => {
+            const minSlot = Math.min(this.dragStartSlot, this.dragEndSlot);
+            const maxSlot = Math.max(this.dragStartSlot, this.dragEndSlot);
+            for (let i = 0; i < slotElements.length; i++) {
+                const track = slotElements[i];
+                if (i >= minSlot && i < maxSlot) {
+                    track.addClass("is-selected");
+                } else {
+                    track.removeClass("is-selected");
+                }
+            }
+        };
+
+        const clearSelection = () => {
+            for (const track of slotElements) {
+                track.removeClass("is-selected");
+            }
+        };
+
+        const slotFromY = (clientY: number): number => {
+            const rect = grid.getBoundingClientRect();
+            const y = clientY - rect.top + grid.scrollTop;
+            const slotHeight = rect.height / slotElements.length;
+            return Math.max(0, Math.min(slotElements.length - 1, Math.floor(y / slotHeight)));
+        };
+
+        const commitSelection = () => {
+            const minSlot = Math.min(this.dragStartSlot, this.dragEndSlot);
+            const maxSlot = Math.max(this.dragStartSlot, this.dragEndSlot);
+            if (maxSlot <= minSlot) return;
+
+            const start = new Date(dayDate);
+            start.setHours(0, minSlot * slotMinutes, 0, 0);
+            const end = new Date(dayDate);
+            end.setHours(0, maxSlot * slotMinutes, 0, 0);
+            if ((end.getTime() - start.getTime()) / (60 * 1000) < 30) {
+                end.setMinutes(start.getMinutes() + 30);
+            }
+
+            this.daySelection = { start, end };
+            this.applyTimeSelection(start, end);
+            clearSelection();
+        };
+
+        grid.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            const target = e.target;
+            if (!(target instanceof HTMLElement)) return;
+            if (target.closest(".calendar-dayview-event")) return;
+
+            this.isDragging = true;
+            this.dragStartY = e.clientY;
+            const slot = slotFromY(e.clientY);
+            this.dragStartSlot = slot;
+            this.dragEndSlot = slot + 1;
+            grid.setPointerCapture(e.pointerId);
+            updateSelection();
+        });
+
+        grid.addEventListener("pointermove", (e) => {
+            if (!this.isDragging) return;
+            this.dragEndSlot = slotFromY(e.clientY) + 1;
+            updateSelection();
+        });
+
+        grid.addEventListener("pointerup", (e) => {
+            if (!this.isDragging) return;
+            this.isDragging = false;
+            this.dragEndSlot = slotFromY(e.clientY) + 1;
+            grid.releasePointerCapture(e.pointerId);
+            commitSelection();
+        });
+
+        grid.addEventListener("pointercancel", () => {
+            if (!this.isDragging) return;
+            this.isDragging = false;
+            clearSelection();
+        });
     }
 
     private renderDayGroup(
@@ -444,5 +690,14 @@ export class CalendarView extends ItemView {
         const hour = String(date.getHours()).padStart(2, "0");
         const minute = String(date.getMinutes()).padStart(2, "0");
         return `${month}-${day} ${hour}:${minute}`;
+    }
+
+    private formatDateLong(date: Date): string {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const weekDays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+        const weekDay = weekDays[date.getDay()];
+        return `${year}年${month}月${day}日 ${weekDay}`;
     }
 }
