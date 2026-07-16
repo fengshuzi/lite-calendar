@@ -28,11 +28,24 @@ export class CalendarView extends ItemView {
     private dayViewContainer: HTMLElement | null = null;
     private dayGridRef: HTMLElement | null = null;
     private dayEvents: CalendarEvent[] = [];
-    private daySelection: { start: Date; end: Date } | null = null;
-    private dragStartY = 0;
     private isDragging = false;
+    private dragMoved = false;
+    private pointerStartY = 0;
     private dragStartSlot = 0;
     private dragEndSlot = 0;
+
+    // Sidebar composer
+    private sidebarEl: HTMLElement | null = null;
+    private sidebarOverlayEl: HTMLElement | null = null;
+    private sidebarTitle: HTMLTextAreaElement | null = null;
+    private sidebarCalendarSelect: HTMLSelectElement | null = null;
+    private sidebarTimeDisplay: HTMLElement | null = null;
+    private sidebarSubmitBtn: HTMLButtonElement | null = null;
+    private sidebarCancelBtn: HTMLButtonElement | null = null;
+    private sidebarTimeBtn: HTMLButtonElement | null = null;
+    private sidebarStartTime: Date | null = null;
+    private sidebarEndTime: Date | null = null;
+    private sidebarEditingEventId: string | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: CalendarPlugin) {
         super(leaf);
@@ -66,6 +79,7 @@ export class CalendarView extends ItemView {
 
         this.renderInputArea(container);
         this.renderEventsList(container);
+        this.renderSidebar(container);
     }
 
     private renderInputArea(container: HTMLElement): void {
@@ -267,6 +281,203 @@ export class CalendarView extends ItemView {
         if (this.submitBtn) this.submitBtn.textContent = "添加事件";
     }
 
+    private renderSidebar(container: HTMLElement): void {
+        const overlay = container.createDiv("calendar-sidebar-overlay");
+        overlay.onclick = () => this.closeSidebar();
+
+        const sidebar = container.createDiv("calendar-sidebar");
+        this.sidebarEl = sidebar;
+        this.sidebarOverlayEl = overlay;
+
+        const header = sidebar.createDiv("calendar-sidebar-header");
+        const titleEl = header.createDiv("calendar-sidebar-title");
+        titleEl.textContent = "新建事件";
+        const closeBtn = header.createEl("button", { cls: "calendar-sidebar-close" });
+        setIcon(closeBtn, "x");
+        closeBtn.title = "关闭";
+        closeBtn.onclick = () => this.closeSidebar();
+
+        const body = sidebar.createDiv("calendar-sidebar-body");
+
+        this.sidebarTitle = body.createEl("textarea", {
+            cls: "calendar-sidebar-input",
+            attr: {
+                placeholder: "事件标题...",
+                rows: "2",
+            },
+        });
+
+        this.sidebarTimeDisplay = body.createDiv("calendar-sidebar-time is-hidden");
+
+        const toolbar = body.createDiv("calendar-sidebar-toolbar");
+
+        this.sidebarCalendarSelect = toolbar.createEl("select", { cls: "calendar-select" });
+        void this.plugin.storage.getCalendars().then((calendars) => {
+            if (!this.sidebarCalendarSelect) return;
+            this.sidebarCalendarSelect.empty();
+            for (const cal of calendars) {
+                this.sidebarCalendarSelect.createEl("option", { text: cal, value: cal });
+            }
+        });
+
+        this.sidebarTimeBtn = toolbar.createEl("button", { cls: "calendar-toolbar-btn" });
+        setIcon(this.sidebarTimeBtn, "calendar-range");
+        this.sidebarTimeBtn.title = "选择日期时间";
+        this.sidebarTimeBtn.onclick = () => {
+            this.showDateTimePicker(this.sidebarStartTime || new Date(), (start, end) => {
+                this.sidebarStartTime = start;
+                this.sidebarEndTime = end;
+                this.updateSidebarTimeDisplay();
+                this.sidebarTitle?.focus();
+            });
+        };
+
+        const actions = sidebar.createDiv("calendar-sidebar-actions");
+
+        this.sidebarCancelBtn = actions.createEl("button", {
+            cls: "calendar-sidebar-btn mod-secondary",
+            text: "取消",
+        });
+        this.sidebarCancelBtn.onclick = () => this.closeSidebar();
+
+        this.sidebarSubmitBtn = actions.createEl("button", {
+            cls: "calendar-sidebar-btn mod-primary",
+            text: "保存",
+        });
+        this.sidebarSubmitBtn.onclick = () => {
+            void this.saveSidebarEvent();
+        };
+
+        if (this.sidebarTitle) {
+            this.sidebarTitle.onkeydown = (e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void this.saveSidebarEvent();
+                } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    this.closeSidebar();
+                }
+            };
+
+            this.sidebarTitle.oninput = () => {
+                this.autoResizeSidebarTitle();
+            };
+        }
+    }
+
+    private autoResizeSidebarTitle(): void {
+        if (!this.sidebarTitle) return;
+        this.sidebarTitle.style.height = "auto";
+        const maxHeight = 160;
+        this.sidebarTitle.style.height = `${Math.min(this.sidebarTitle.scrollHeight, maxHeight)}px`;
+    }
+
+    private updateSidebarTimeDisplay(): void {
+        if (!this.sidebarTimeDisplay) return;
+        if (this.sidebarStartTime && this.sidebarEndTime) {
+            this.sidebarTimeDisplay.removeClass("is-hidden");
+            this.sidebarTimeDisplay.empty();
+            const inner = this.sidebarTimeDisplay.createDiv({ cls: "calendar-time-display-inner" });
+            const chip = inner.createDiv({ cls: "calendar-time-chip" });
+            setIcon(chip.createSpan(), "calendar-clock");
+            chip.createSpan({
+                text: `${this.formatDateTime(this.sidebarStartTime)} - ${this.formatTime(this.sidebarEndTime.toISOString())}`,
+                cls: "calendar-time-text",
+            });
+            const clearBtn = inner.createEl("button", { cls: "calendar-time-clear", text: "清除" });
+            clearBtn.addEventListener("click", () => {
+                this.sidebarStartTime = null;
+                this.sidebarEndTime = null;
+                this.sidebarTimeDisplay?.addClass("is-hidden");
+                this.sidebarTimeBtn?.removeClass("active");
+                this.sidebarTitle?.focus();
+            });
+        } else {
+            this.sidebarTimeDisplay.addClass("is-hidden");
+        }
+    }
+
+    private resetSidebarForm(): void {
+        if (this.sidebarTitle) {
+            this.sidebarTitle.value = "";
+            this.sidebarTitle.style.height = "auto";
+        }
+        this.sidebarStartTime = null;
+        this.sidebarEndTime = null;
+        this.sidebarEditingEventId = null;
+        this.sidebarTimeDisplay?.addClass("is-hidden");
+        this.sidebarTimeBtn?.removeClass("active");
+        if (this.sidebarSubmitBtn) this.sidebarSubmitBtn.textContent = "保存";
+        const titleEl = this.sidebarEl?.querySelector(".calendar-sidebar-title");
+        if (titleEl) titleEl.textContent = "新建事件";
+    }
+
+    private openSidebar(options: { event?: CalendarEvent; start?: Date; end?: Date }): void {
+        this.resetSidebarForm();
+
+        const { event, start, end } = options;
+
+        if (event) {
+            this.sidebarEditingEventId = event.id;
+            if (this.sidebarTitle) this.sidebarTitle.value = event.title;
+            this.sidebarStartTime = new Date(event.start);
+            this.sidebarEndTime = new Date(event.end);
+            if (this.sidebarCalendarSelect) this.sidebarCalendarSelect.value = event.calendar;
+            if (this.sidebarSubmitBtn) this.sidebarSubmitBtn.textContent = "保存";
+            const titleEl = this.sidebarEl?.querySelector(".calendar-sidebar-title");
+            if (titleEl) titleEl.textContent = "编辑事件";
+        } else if (start && end) {
+            this.sidebarStartTime = start;
+            this.sidebarEndTime = end;
+        } else {
+            const now = new Date();
+            this.sidebarStartTime = new Date(now);
+            this.sidebarStartTime.setHours(this.sidebarStartTime.getHours() + 1, 0, 0, 0);
+            this.sidebarEndTime = new Date(this.sidebarStartTime);
+            this.sidebarEndTime.setHours(this.sidebarEndTime.getHours() + 1);
+        }
+
+        this.updateSidebarTimeDisplay();
+        this.autoResizeSidebarTitle();
+
+        this.sidebarEl?.addClass("is-open");
+        this.sidebarOverlayEl?.addClass("is-open");
+        this.sidebarTitle?.focus();
+    }
+
+    private closeSidebar(): void {
+        this.sidebarEl?.removeClass("is-open");
+        this.sidebarOverlayEl?.removeClass("is-open");
+    }
+
+    private async saveSidebarEvent(): Promise<void> {
+        const title = this.sidebarTitle?.value.trim();
+        if (!title) return;
+
+        const calendar = this.sidebarCalendarSelect?.value;
+        if (!calendar) {
+            new Notice("请选择日历");
+            return;
+        }
+
+        if (!this.sidebarStartTime || !this.sidebarEndTime) {
+            new Notice("请设置时间");
+            return;
+        }
+
+        const startISO = this.sidebarStartTime.toISOString();
+        const endISO = this.sidebarEndTime.toISOString();
+
+        if (this.sidebarEditingEventId) {
+            await this.plugin.storage.updateEvent(this.sidebarEditingEventId, title, startISO, endISO);
+        } else {
+            await this.plugin.storage.createEvent(calendar, title, startISO, endISO);
+        }
+
+        this.closeSidebar();
+        await this.loadAndRender();
+    }
+
     private showDateTimePicker(
         initialDate: Date,
         onSelect: (start: Date, end: Date) => void,
@@ -337,7 +548,7 @@ export class CalendarView extends ItemView {
 
         if (days.length === 0) {
             const emptyState = listContainer.createDiv({ cls: "calendar-empty-state" });
-            emptyState.createDiv({ text: "📅", cls: "calendar-empty-empty-icon" });
+            emptyState.createDiv({ text: "📅", cls: "calendar-empty-icon" });
             emptyState.createDiv({ text: "未来3天没有日程", cls: "calendar-empty-title" });
             emptyState.createDiv({ text: "在上方输入框开始添加", cls: "calendar-empty-desc" });
             return;
@@ -449,7 +660,7 @@ export class CalendarView extends ItemView {
 
             eventEl.onclick = (e) => {
                 e.stopPropagation();
-                this.startEditEvent?.(event);
+                this.openSidebar({ event });
             };
             eventEl.oncontextmenu = (e) => {
                 e.preventDefault();
@@ -495,7 +706,10 @@ export class CalendarView extends ItemView {
         const commitSelection = () => {
             const minSlot = Math.min(this.dragStartSlot, this.dragEndSlot);
             const maxSlot = Math.max(this.dragStartSlot, this.dragEndSlot);
-            if (maxSlot <= minSlot) return;
+            if (maxSlot <= minSlot) {
+                clearSelection();
+                return;
+            }
 
             const start = new Date(dayDate);
             start.setHours(0, minSlot * slotMinutes, 0, 0);
@@ -505,8 +719,7 @@ export class CalendarView extends ItemView {
                 end.setMinutes(start.getMinutes() + 30);
             }
 
-            this.daySelection = { start, end };
-            this.applyTimeSelection(start, end);
+            this.openSidebar({ start, end });
             clearSelection();
         };
 
@@ -517,7 +730,8 @@ export class CalendarView extends ItemView {
             if (target.closest(".calendar-dayview-event")) return;
 
             this.isDragging = true;
-            this.dragStartY = e.clientY;
+            this.dragMoved = false;
+            this.pointerStartY = e.clientY;
             const slot = slotFromY(e.clientY);
             this.dragStartSlot = slot;
             this.dragEndSlot = slot + 1;
@@ -527,6 +741,9 @@ export class CalendarView extends ItemView {
 
         grid.addEventListener("pointermove", (e) => {
             if (!this.isDragging) return;
+            if (Math.abs(e.clientY - this.pointerStartY) > 4) {
+                this.dragMoved = true;
+            }
             this.dragEndSlot = slotFromY(e.clientY) + 1;
             updateSelection();
         });
@@ -534,7 +751,11 @@ export class CalendarView extends ItemView {
         grid.addEventListener("pointerup", (e) => {
             if (!this.isDragging) return;
             this.isDragging = false;
-            this.dragEndSlot = slotFromY(e.clientY) + 1;
+            if (!this.dragMoved) {
+                this.dragEndSlot = this.dragStartSlot + 1;
+            } else {
+                this.dragEndSlot = slotFromY(e.clientY) + 1;
+            }
             grid.releasePointerCapture(e.pointerId);
             commitSelection();
         });
