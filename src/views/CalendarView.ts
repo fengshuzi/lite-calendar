@@ -25,6 +25,7 @@ export class CalendarView extends ItemView {
     private locationInput: HTMLInputElement | null = null;
     private notesInput: HTMLTextAreaElement | null = null;
     private calendarSelectRef: HTMLSelectElement | null = null;
+    private calendarColorDot: HTMLElement | null = null;
     private timeButton: HTMLButtonElement | null = null;
     private timeTextEl: HTMLElement | null = null;
     private deleteBtn: HTMLButtonElement | null = null;
@@ -144,11 +145,11 @@ export class CalendarView extends ItemView {
 
         const calendarRow = card.createDiv("calendar-editor-row calendar-editor-calendar-row");
         const colorDot = calendarRow.createSpan("calendar-editor-color-dot");
+        this.calendarColorDot = colorDot;
         calendarRow.createSpan({ cls: "calendar-editor-row-label", text: "日历" });
         this.calendarSelectRef = calendarRow.createEl("select", { cls: "calendar-editor-select" });
         this.calendarSelectRef.onchange = () => {
-            const color = this.getCalendarColor(this.calendarSelectRef?.value || "");
-            colorDot.style.background = color;
+            this.updateCalendarColorDot();
         };
         void this.plugin.storage.getCalendars().then((calendars) => {
             if (!this.calendarSelectRef) return;
@@ -156,8 +157,7 @@ export class CalendarView extends ItemView {
             for (const calendar of calendars) {
                 this.calendarSelectRef.createEl("option", { text: calendar, value: calendar });
             }
-            const color = this.getCalendarColor(this.calendarSelectRef.value || calendars[0] || "");
-            colorDot.style.background = color;
+            this.resetCalendarSelection();
         });
         this.timeButton = card.createEl("button", { cls: "calendar-editor-time" });
         setIcon(this.timeButton.createSpan("calendar-editor-time-icon"), "calendar-clock");
@@ -233,11 +233,13 @@ export class CalendarView extends ItemView {
             if (this.locationInput) this.locationInput.value = event.location || "";
             if (this.notesInput) this.notesInput.value = event.notes || "";
             if (this.calendarSelectRef) this.calendarSelectRef.value = event.calendar;
+            this.updateCalendarColorDot();
         } else {
             this.selectedEventId = null;
             if (this.titleInput) this.titleInput.value = "";
             if (this.locationInput) this.locationInput.value = "";
             if (this.notesInput) this.notesInput.value = "";
+            this.resetCalendarSelection();
         }
 
         if (this.inspectorModeEl) this.inspectorModeEl.setText(mode === "edit" ? "编辑日程" : "新建日程");
@@ -255,9 +257,30 @@ export class CalendarView extends ItemView {
         this.selectedEventId = null;
         this.draftStart = null;
         this.draftEnd = null;
+        this.clearInspectorFields();
         this.shellEl?.removeClass("has-inspector");
         this.inspectorEl?.addClass("is-hidden");
         this.highlightSelectedEvent();
+    }
+
+    private clearInspectorFields(): void {
+        if (this.titleInput) this.titleInput.value = "";
+        if (this.locationInput) this.locationInput.value = "";
+        if (this.notesInput) this.notesInput.value = "";
+        this.resetCalendarSelection();
+    }
+
+    private resetCalendarSelection(): void {
+        if (this.calendarSelectRef && this.calendarSelectRef.options.length > 0) {
+            this.calendarSelectRef.selectedIndex = 0;
+        }
+        this.updateCalendarColorDot();
+    }
+
+    private updateCalendarColorDot(): void {
+        if (!this.calendarColorDot) return;
+        const calendar = this.calendarSelectRef?.value || "";
+        this.calendarColorDot.style.background = this.getCalendarColor(calendar);
     }
 
     private updateInspectorTime(): void {
