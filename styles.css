@@ -219,27 +219,39 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: var(--calendar-dayview-grid-height, 2304px);
+    height: var(--calendar-dayview-grid-height, 936px);
+    min-height: var(--calendar-dayview-grid-height, 936px);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .calendar-dayview-row {
     position: relative;
     display: flex;
-    flex: 1;
-    min-height: 48px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+    flex: 0 0 var(--calendar-dayview-slot-height, 26px);
+    min-height: var(--calendar-dayview-slot-height, 26px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.035);
+}
+
+.calendar-dayview-row[data-minute="30"] {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.theme-dark .calendar-dayview-grid,
+.theme-dark .calendar-dayview-row[data-minute="30"] {
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 .theme-dark .calendar-dayview-row {
-    border-bottom-color: rgba(255, 255, 255, 0.08);
-}
-
-.calendar-dayview-row:nth-child(2n) {
-    border-bottom-color: rgba(0, 0, 0, 0.035);
-}
-
-.theme-dark .calendar-dayview-row:nth-child(2n) {
     border-bottom-color: rgba(255, 255, 255, 0.045);
+}
+
+.calendar-dayview-row[data-minute="0"] .calendar-dayview-track {
+    background: rgba(0, 0, 0, 0.008);
+}
+
+.theme-dark .calendar-dayview-row[data-minute="0"] .calendar-dayview-track {
+    background: rgba(255, 255, 255, 0.012);
 }
 
 .calendar-dayview-hour-label {
@@ -274,7 +286,7 @@
     position: absolute;
     z-index: 4;
     box-sizing: border-box;
-    min-height: 30px;
+    min-height: 0;
     overflow: hidden;
     padding: 8px 10px;
     border-radius: 6px;
@@ -283,6 +295,14 @@
     font-size: 12px;
     line-height: 1.25;
     transition: filter 0.14s ease, outline-color 0.14s ease, transform 0.14s ease;
+}
+
+.calendar-dayview-event.is-compact {
+    padding: 4px 10px;
+}
+
+.calendar-dayview-event.is-tight {
+    padding: 5px 10px;
 }
 
 .calendar-dayview-event:hover {
@@ -303,12 +323,29 @@
     text-overflow: ellipsis;
 }
 
+.calendar-dayview-event.is-compact .calendar-dayview-event-title {
+    line-height: 18px;
+}
+
+.calendar-dayview-event.is-tight .calendar-dayview-event-title {
+    line-height: 15px;
+}
+
 .calendar-dayview-event-time {
     margin-top: 2px;
     opacity: 0.86;
     font-size: 11px;
     font-weight: 620;
     font-variant-numeric: tabular-nums;
+}
+
+.calendar-dayview-event.is-tight .calendar-dayview-event-time {
+    margin-top: 1px;
+    line-height: 13px;
+}
+
+.calendar-dayview-event.is-compact .calendar-dayview-event-time {
+    display: none;
 }
 
 .calendar-now-line {

@@ -406,6 +406,12 @@ export class CalendarView extends ItemView {
         titleBlock.createDiv({ cls: "calendar-topbar-subtitle", text: this.formatWeekSubtitle(dayDate) });
 
         const nav = topbar.createDiv("calendar-topbar-nav");
+        const refreshBtn = nav.createEl("button", { cls: "calendar-dayview-nav", attr: { "aria-label": "刷新日程" } });
+        refreshBtn.title = "刷新日程";
+        setIcon(refreshBtn, "refresh-cw");
+        refreshBtn.onclick = () => {
+            void this.loadAndRender();
+        };
         const prevBtn = nav.createEl("button", { cls: "calendar-dayview-nav", attr: { "aria-label": "前一天" } });
         setIcon(prevBtn, "chevron-left");
         prevBtn.onclick = () => {
@@ -430,75 +436,74 @@ export class CalendarView extends ItemView {
         const gridWrapper = container.createDiv("calendar-dayview-grid-wrapper");
         const grid = gridWrapper.createDiv("calendar-dayview-grid");
 
-        const slotsPerHour = 2;
-        const slotMinutes = 60 / slotsPerHour;
-        const slotHeightPx = 48;
-        const totalSlots = 24 * slotsPerHour;
+        const slotMinutes = 30;
+        const hourHeightPx = 52;
+        const minuteHeightPx = hourHeightPx / 60;
+        const slotHeightPx = slotMinutes * minuteHeightPx;
+        const totalMinutes = 24 * 60;
         const showEarlyHours = this.plugin.settings.showEarlyHours;
-        const startSlotOffset = showEarlyHours ? 0 : 6 * slotsPerHour;
+        const startMinuteOffset = showEarlyHours ? 0 : 6 * 60;
         grid.style.setProperty(
             "--calendar-dayview-grid-height",
-            `${(totalSlots - startSlotOffset) * slotHeightPx}px`,
+            `${(totalMinutes - startMinuteOffset) * minuteHeightPx}px`,
         );
+        grid.style.setProperty("--calendar-dayview-slot-height", `${slotHeightPx}px`);
 
         const slotElements: HTMLElement[] = [];
-        for (let i = startSlotOffset; i < totalSlots; i++) {
-            const hour = Math.floor(i / slotsPerHour);
-            const minute = (i % slotsPerHour) * slotMinutes;
+        for (let minuteOfDay = startMinuteOffset; minuteOfDay < totalMinutes; minuteOfDay += slotMinutes) {
+            const hour = Math.floor(minuteOfDay / 60);
+            const minute = minuteOfDay % 60;
             const row = grid.createDiv("calendar-dayview-row");
-            row.dataset.slot = String(i);
+            row.dataset.minuteOfDay = String(minuteOfDay);
             row.dataset.hour = String(hour);
             row.dataset.minute = String(minute);
 
             const label = row.createDiv("calendar-dayview-hour-label");
-            if (i % slotsPerHour === 0) {
+            if (minute === 0) {
                 label.textContent = `${String(hour).padStart(2, "0")}:00`;
             }
 
             const track = row.createDiv("calendar-dayview-track");
-            track.dataset.slot = String(i);
+            track.dataset.minuteOfDay = String(minuteOfDay);
             slotElements.push(track);
         }
 
-        this.renderCurrentTimeIndicator(grid, slotHeightPx, slotMinutes, dayDate, startSlotOffset, slotElements.length);
-        this.renderDayEvents(grid, slotElements, slotMinutes, slotHeightPx, dayDate, startSlotOffset, totalSlots);
-        this.attachDayGridInteractions(grid, slotElements, slotMinutes, dayDate, startSlotOffset);
+        this.renderCurrentTimeIndicator(grid, minuteHeightPx, dayDate, startMinuteOffset, totalMinutes - startMinuteOffset);
+        this.renderDayEvents(grid, minuteHeightPx, dayDate, startMinuteOffset, totalMinutes);
+        this.attachDayGridInteractions(grid, slotElements, slotMinutes, minuteHeightPx, dayDate, startMinuteOffset);
     }
 
     private renderCurrentTimeIndicator(
         grid: HTMLElement,
-        slotHeightPx: number,
-        slotMinutes: number,
+        minuteHeightPx: number,
         dayDate: Date,
-        startSlotOffset: number,
-        visibleSlots: number,
+        startMinuteOffset: number,
+        visibleMinutes: number,
     ): void {
         const now = new Date();
         if (this.getDateKey(now) !== this.getDateKey(dayDate)) return;
         const minutes = now.getHours() * 60 + now.getMinutes();
-        const slot = minutes / slotMinutes - startSlotOffset;
-        if (slot < 0 || slot > visibleSlots) return;
+        const minute = minutes - startMinuteOffset;
+        if (minute < 0 || minute > visibleMinutes) return;
 
         const line = grid.createDiv("calendar-now-line");
-        line.style.top = `${slot * slotHeightPx}px`;
+        line.style.top = `${minute * minuteHeightPx}px`;
         line.createSpan({ cls: "calendar-now-label", text: this.formatTime(now.toISOString()) });
     }
 
     private renderDayEvents(
         grid: HTMLElement,
-        slotElements: HTMLElement[],
-        slotMinutes: number,
-        slotHeightPx: number,
+        minuteHeightPx: number,
         dayDate: Date,
-        startSlotOffset: number,
-        totalSlots: number,
+        startMinuteOffset: number,
+        totalMinutes: number,
     ): void {
         const dayStart = dayDate.getTime();
 
         type EventLayout = {
             event: CalendarEvent;
-            startSlot: number;
-            endSlot: number;
+            startMinute: number;
+            endMinute: number;
             cluster: number;
             column: number;
         };
@@ -507,24 +512,24 @@ export class CalendarView extends ItemView {
         for (const event of this.dayEvents) {
             const start = new Date(event.start);
             const end = new Date(event.end);
-            const actualStartSlot = Math.max(0, Math.floor((start.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
-            const actualEndSlot = Math.min(totalSlots, Math.ceil((end.getTime() - dayStart) / (slotMinutes * 60 * 1000)));
-            if (actualEndSlot <= startSlotOffset) continue;
+            const actualStartMinute = Math.max(0, (start.getTime() - dayStart) / (60 * 1000));
+            const actualEndMinute = Math.min(totalMinutes, (end.getTime() - dayStart) / (60 * 1000));
+            if (actualEndMinute <= startMinuteOffset) continue;
 
-            const startSlot = Math.max(0, actualStartSlot - startSlotOffset);
-            const endSlot = Math.min(slotElements.length, actualEndSlot - startSlotOffset);
-            if (startSlot >= slotElements.length || endSlot <= 0) continue;
+            const startMinute = Math.max(0, actualStartMinute - startMinuteOffset);
+            const endMinute = Math.min(totalMinutes - startMinuteOffset, actualEndMinute - startMinuteOffset);
+            if (startMinute >= totalMinutes - startMinuteOffset || endMinute <= 0) continue;
 
-            layouts.push({ event, startSlot, endSlot, cluster: 0, column: 0 });
+            layouts.push({ event, startMinute, endMinute, cluster: 0, column: 0 });
         }
 
-        layouts.sort((a, b) => a.startSlot - b.startSlot || a.endSlot - b.endSlot);
+        layouts.sort((a, b) => a.startMinute - b.startMinute || a.endMinute - b.endMinute);
 
         const clusters: { columns: number; layouts: EventLayout[] }[] = [];
         let active: EventLayout[] = [];
 
         for (const layout of layouts) {
-            active = active.filter((a) => a.endSlot > layout.startSlot);
+            active = active.filter((a) => a.endMinute > layout.startMinute);
             if (active.length === 0) {
                 clusters.push({ columns: 0, layouts: [] });
             }
@@ -540,7 +545,7 @@ export class CalendarView extends ItemView {
             for (const layout of cluster.layouts) {
                 const usedColumns = new Set<number>();
                 for (const other of assigned) {
-                    if (other.endSlot > layout.startSlot && other.startSlot < layout.endSlot) {
+                    if (other.endMinute > layout.startMinute && other.startMinute < layout.endMinute) {
                         usedColumns.add(other.column);
                     }
                 }
@@ -565,10 +570,17 @@ export class CalendarView extends ItemView {
 
             const eventEl = grid.createDiv("calendar-dayview-event");
             const eventColor = this.getCalendarColor(layout.event.calendar);
+            const eventDurationMinutes = layout.endMinute - layout.startMinute;
+            const eventHeight = Math.max(1, (layout.endMinute - layout.startMinute) * minuteHeightPx);
             eventEl.dataset.eventId = layout.event.id;
             if (layout.event.id === this.selectedEventId) eventEl.addClass("is-selected");
-            eventEl.style.top = `${layout.startSlot * slotHeightPx}px`;
-            eventEl.style.height = `${(layout.endSlot - layout.startSlot) * slotHeightPx}px`;
+            if (eventDurationMinutes < 45) {
+                eventEl.addClass("is-compact");
+            } else if (eventHeight < 48) {
+                eventEl.addClass("is-tight");
+            }
+            eventEl.style.top = `${layout.startMinute * minuteHeightPx}px`;
+            eventEl.style.height = `${eventHeight}px`;
             eventEl.style.left = left;
             eventEl.style.width = width;
             eventEl.style.background = eventColor;
@@ -593,15 +605,18 @@ export class CalendarView extends ItemView {
         grid: HTMLElement,
         slotElements: HTMLElement[],
         slotMinutes: number,
+        minuteHeightPx: number,
         dayDate: Date,
-        startSlotOffset: number,
+        startMinuteOffset: number,
     ): void {
         const updateSelection = () => {
-            const minSlot = Math.min(this.dragStartSlot, this.dragEndSlot);
-            const maxSlot = Math.max(this.dragStartSlot, this.dragEndSlot);
+            const minMinute = Math.min(this.dragStartSlot, this.dragEndSlot);
+            const maxMinute = Math.max(this.dragStartSlot, this.dragEndSlot);
             for (let i = 0; i < slotElements.length; i++) {
                 const track = slotElements[i];
-                if (i >= minSlot && i < maxSlot) {
+                const slotStartMinute = i * slotMinutes;
+                const slotEndMinute = slotStartMinute + slotMinutes;
+                if (slotStartMinute < maxMinute && slotEndMinute > minMinute) {
                     track.addClass("is-selected");
                 } else {
                     track.removeClass("is-selected");
@@ -615,26 +630,28 @@ export class CalendarView extends ItemView {
             }
         };
 
-        const slotFromY = (clientY: number): number => {
+        const minuteFromY = (clientY: number): number => {
             const rect = grid.getBoundingClientRect();
-            const wrapper = grid.parentElement;
-            const scrollTop = wrapper ? wrapper.scrollTop : 0;
-            const y = clientY - rect.top + scrollTop;
-            const slotHeight = rect.height / slotElements.length;
-            return Math.max(0, Math.min(slotElements.length - 1, Math.floor(y / slotHeight)));
+            // rect.top already includes the wrapper scroll offset, so clientY - rect.top
+            // is the coordinate inside the full grid even after scrolling.
+            const y = clientY - rect.top;
+            const visibleMinutes = Math.round(rect.height / minuteHeightPx);
+            return Math.max(0, Math.min(visibleMinutes, Math.round(y / minuteHeightPx)));
         };
 
         const commitSelection = () => {
-            const minSlot = Math.min(this.dragStartSlot, this.dragEndSlot);
-            const maxSlot = Math.max(this.dragStartSlot, this.dragEndSlot);
-            if (maxSlot <= minSlot) return;
+            const minMinute = Math.min(this.dragStartSlot, this.dragEndSlot);
+            let maxMinute = Math.max(this.dragStartSlot, this.dragEndSlot);
+            if (maxMinute <= minMinute) {
+                maxMinute = minMinute + 1;
+            }
 
             const start = new Date(dayDate);
-            start.setHours(0, (minSlot + startSlotOffset) * slotMinutes, 0, 0);
+            start.setHours(0, minMinute + startMinuteOffset, 0, 0);
             const end = new Date(dayDate);
-            end.setHours(0, (maxSlot + startSlotOffset) * slotMinutes, 0, 0);
-            if ((end.getTime() - start.getTime()) / (60 * 1000) < 30) {
-                end.setMinutes(start.getMinutes() + 30);
+            end.setHours(0, maxMinute + startMinuteOffset, 0, 0);
+            if (end.getTime() <= start.getTime()) {
+                end.setMinutes(start.getMinutes() + 1);
             }
 
             this.draftStart = start;
@@ -650,23 +667,23 @@ export class CalendarView extends ItemView {
             if (target.closest(".calendar-dayview-event")) return;
 
             this.isDragging = true;
-            const slot = slotFromY(e.clientY);
-            this.dragStartSlot = slot;
-            this.dragEndSlot = slot + 1;
+            const minute = minuteFromY(e.clientY);
+            this.dragStartSlot = minute;
+            this.dragEndSlot = minute + 1;
             grid.setPointerCapture(e.pointerId);
             updateSelection();
         });
 
         grid.addEventListener("pointermove", (e) => {
             if (!this.isDragging) return;
-            this.dragEndSlot = slotFromY(e.clientY) + 1;
+            this.dragEndSlot = minuteFromY(e.clientY);
             updateSelection();
         });
 
         grid.addEventListener("pointerup", (e) => {
             if (!this.isDragging) return;
             this.isDragging = false;
-            this.dragEndSlot = slotFromY(e.clientY) + 1;
+            this.dragEndSlot = minuteFromY(e.clientY);
             grid.releasePointerCapture(e.pointerId);
             commitSelection();
         });

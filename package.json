@@ -1,6 +1,6 @@
 {
   "name": "lite-calendar",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "macOS Calendar integration with a lightweight, flash-note style interface.",
   "main": "main.js",
   "scripts": {
