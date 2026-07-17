@@ -13,24 +13,27 @@ import { DateTimePickerModal } from "../components/DateTimePicker";
 
 export const VIEW_TYPE_CALENDAR = "calendar-view";
 
+type InspectorMode = "create" | "edit";
+
 export class CalendarView extends ItemView {
     plugin: CalendarPlugin;
-    private listContainer: HTMLElement | null = null;
-    private startEditEvent: ((event: CalendarEvent) => void) | null = null;
-    private textarea: HTMLTextAreaElement | null = null;
-    private submitBtn: HTMLButtonElement | null = null;
-    private cancelBtn: HTMLButtonElement | null = null;
-    private timeBtn: HTMLButtonElement | null = null;
-    private timeDisplay: HTMLElement | null = null;
-    private statusHint: HTMLElement | null = null;
-    private mode: "list" | "day" = "list";
-    private currentDay = new Date();
+    private shellEl: HTMLElement | null = null;
+    private calendarContainer: HTMLElement | null = null;
+    private inspectorEl: HTMLElement | null = null;
+    private inspectorModeEl: HTMLElement | null = null;
+    private titleInput: HTMLInputElement | null = null;
+    private locationInput: HTMLInputElement | null = null;
+    private notesInput: HTMLTextAreaElement | null = null;
     private calendarSelectRef: HTMLSelectElement | null = null;
-    private dayViewContainer: HTMLElement | null = null;
-    private dayGridRef: HTMLElement | null = null;
+    private timeButton: HTMLButtonElement | null = null;
+    private timeTextEl: HTMLElement | null = null;
+    private deleteBtn: HTMLButtonElement | null = null;
+    private saveBtn: HTMLButtonElement | null = null;
+    private currentDay = new Date();
     private dayEvents: CalendarEvent[] = [];
-    private daySelection: { start: Date; end: Date } | null = null;
-    private dragStartY = 0;
+    private selectedEventId: string | null = null;
+    private draftStart: Date | null = null;
+    private draftEnd: Date | null = null;
     private isDragging = false;
     private dragStartSlot = 0;
     private dragEndSlot = 0;
@@ -57,7 +60,7 @@ export class CalendarView extends ItemView {
     }
 
     async onClose(): Promise<void> {
-        // cleanup placeholder
+        // no-op
     }
 
     render(): void {
@@ -65,8 +68,10 @@ export class CalendarView extends ItemView {
         container.empty();
         container.addClass("calendar-view");
 
-        this.renderInputArea(container);
-        this.renderEventsList(container);
+        this.shellEl = container.createDiv("calendar-shell");
+        const stage = this.shellEl.createDiv("calendar-stage");
+        this.renderCalendar(stage);
+        this.renderInspector(this.shellEl);
     }
 
     private getCalendarColor(calendar: string): string {
@@ -81,207 +86,223 @@ export class CalendarView extends ItemView {
         return luminance > 0.5 ? "#000000" : "#ffffff";
     }
 
-    private renderInputArea(container: HTMLElement): void {
-        const inputArea = container.createDiv("calendar-input-area");
-        const inputWrapper = inputArea.createDiv("calendar-input-wrapper");
+    private renderInspector(container: HTMLElement): void {
+        const inspector = container.createEl("aside", { cls: "calendar-inspector is-hidden" });
+        this.inspectorEl = inspector;
 
-        this.statusHint = inputWrapper.createDiv("calendar-input-hint is-hidden");
+        const miniHeader = inspector.createDiv("calendar-mini-header");
+        const miniTitle = miniHeader.createDiv({ cls: "calendar-mini-title", text: this.formatMonthTitle(this.currentDay) });
+        const miniActions = miniHeader.createDiv("calendar-mini-actions");
+        const prevMonthBtn = miniActions.createEl("button", { cls: "calendar-mini-nav", attr: { "aria-label": "上个月" } });
+        setIcon(prevMonthBtn, "chevron-left");
+        const todayBtn = miniActions.createEl("button", { cls: "calendar-mini-today", text: "今天" });
+        const nextMonthBtn = miniActions.createEl("button", { cls: "calendar-mini-nav", attr: { "aria-label": "下个月" } });
+        setIcon(nextMonthBtn, "chevron-right");
 
-        this.textarea = inputWrapper.createEl("textarea", {
-            cls: "calendar-input",
-            attr: {
-                placeholder: "添加日历事件...",
-                rows: "2",
-            },
+        const miniGrid = inspector.createDiv("calendar-mini-month");
+        const renderMiniMonth = () => {
+            miniTitle.setText(this.formatMonthTitle(this.currentDay));
+            this.renderMiniMonth(miniGrid);
+        };
+        prevMonthBtn.onclick = () => {
+            this.currentDay.setMonth(this.currentDay.getMonth() - 1);
+            renderMiniMonth();
+            void this.loadAndRender();
+        };
+        todayBtn.onclick = () => {
+            this.currentDay = new Date();
+            renderMiniMonth();
+            void this.loadAndRender();
+        };
+        nextMonthBtn.onclick = () => {
+            this.currentDay.setMonth(this.currentDay.getMonth() + 1);
+            renderMiniMonth();
+            void this.loadAndRender();
+        };
+        renderMiniMonth();
+
+        const card = inspector.createDiv("calendar-editor-card");
+        const cardTop = card.createDiv("calendar-editor-top");
+        this.inspectorModeEl = cardTop.createDiv({ cls: "calendar-editor-mode", text: "新建日程" });
+        const closeBtn = cardTop.createEl("button", { cls: "calendar-editor-close", attr: { "aria-label": "关闭" } });
+        setIcon(closeBtn, "x");
+        closeBtn.onclick = () => this.closeInspector();
+
+        this.titleInput = card.createEl("input", {
+            cls: "calendar-editor-title",
+            attr: { placeholder: "添加标题", type: "text" },
         });
+        this.titleInput.onkeydown = (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                void this.saveInspector();
+            } else if (event.key === "Escape") {
+                event.preventDefault();
+                this.closeInspector();
+            }
+        };
 
-        this.timeDisplay = inputWrapper.createDiv("calendar-time-display is-hidden");
-
-        const inputActions = inputWrapper.createDiv("calendar-input-actions");
-        const toolbar = inputActions.createDiv("calendar-input-toolbar");
-
-        const calendarSelect = toolbar.createEl("select", { cls: "calendar-select" });
-        this.calendarSelectRef = calendarSelect;
+        const calendarRow = card.createDiv("calendar-editor-row calendar-editor-calendar-row");
+        const colorDot = calendarRow.createSpan("calendar-editor-color-dot");
+        calendarRow.createSpan({ cls: "calendar-editor-row-label", text: "日历" });
+        this.calendarSelectRef = calendarRow.createEl("select", { cls: "calendar-editor-select" });
+        this.calendarSelectRef.onchange = () => {
+            const color = this.getCalendarColor(this.calendarSelectRef?.value || "");
+            colorDot.style.background = color;
+        };
         void this.plugin.storage.getCalendars().then((calendars) => {
-            calendarSelect.empty();
-            for (const cal of calendars) {
-                calendarSelect.createEl("option", { text: cal, value: cal });
+            if (!this.calendarSelectRef) return;
+            this.calendarSelectRef.empty();
+            for (const calendar of calendars) {
+                this.calendarSelectRef.createEl("option", { text: calendar, value: calendar });
             }
+            const color = this.getCalendarColor(this.calendarSelectRef.value || calendars[0] || "");
+            colorDot.style.background = color;
         });
-
-        let startTime: Date | null = null;
-        let endTime: Date | null = null;
-
-        const setDefaultTimes = () => {
-            const now = new Date();
-            startTime = new Date(now);
-            startTime.setHours(startTime.getHours() + 1, 0, 0, 0);
-            endTime = new Date(startTime);
-            endTime.setHours(endTime.getHours() + 1);
-        };
-        setDefaultTimes();
-
-        const updateTimeDisplay = () => {
-            if (!this.timeDisplay) return;
-            if (startTime && endTime) {
-                this.timeDisplay.removeClass("is-hidden");
-                this.timeDisplay.empty();
-                const inner = this.timeDisplay.createDiv({ cls: "calendar-time-display-inner" });
-                const chip = inner.createDiv({ cls: "calendar-time-chip" });
-                setIcon(chip.createSpan(), "calendar-clock");
-                chip.createSpan({
-                    text: `${this.formatDateTime(startTime)} - ${this.formatTime(endTime.toISOString())}`,
-                    cls: "calendar-time-text",
-                });
-                const clearBtn = inner.createEl("button", { cls: "calendar-time-clear", text: "清除" });
-                clearBtn.addEventListener("click", () => {
-                    startTime = null;
-                    endTime = null;
-                    this.timeDisplay?.addClass("is-hidden");
-                    this.timeBtn?.removeClass("active");
-                    this.textarea?.focus();
-                });
-            } else {
-                this.timeDisplay.addClass("is-hidden");
-            }
-        };
-
-        this.timeBtn = toolbar.createEl("button", { cls: "calendar-toolbar-btn" });
-        setIcon(this.timeBtn, "calendar-range");
-        this.timeBtn.title = "选择日期时间";
-        this.timeBtn.onclick = () => {
-            this.showDateTimePicker(startTime || new Date(), (start, end) => {
-                this.applyTimeSelection(start, end);
+        this.timeButton = card.createEl("button", { cls: "calendar-editor-time" });
+        setIcon(this.timeButton.createSpan("calendar-editor-time-icon"), "calendar-clock");
+        this.timeTextEl = this.timeButton.createSpan("calendar-editor-time-text");
+        this.timeButton.onclick = () => {
+            this.showDateTimePicker(this.draftStart || new Date(), (start, end) => {
+                this.draftStart = start;
+                this.draftEnd = end;
+                this.updateInspectorTime();
             });
         };
 
-        const actionButtons = inputActions.createDiv("calendar-action-buttons");
-
-        this.cancelBtn = actionButtons.createEl("button", {
-            cls: "calendar-cancel-btn is-hidden",
-            text: "取消",
+        this.locationInput = card.createEl("input", {
+            cls: "calendar-editor-field",
+            attr: { placeholder: "添加位置或视频通话", type: "text" },
+        });
+        this.notesInput = card.createEl("textarea", {
+            cls: "calendar-editor-notes",
+            attr: { placeholder: "添加备注、URL 或附件", rows: "3" },
         });
 
-        this.submitBtn = actionButtons.createEl("button", {
-            cls: "calendar-submit-btn",
-            text: "添加事件",
-        });
-
-        let editingEventId: string | null = null;
-
-        this.cancelBtn.onclick = () => {
-            editingEventId = null;
-            setDefaultTimes();
-            this.resetComposer();
-            this.textarea?.focus();
+        const footer = card.createDiv("calendar-editor-footer");
+        this.deleteBtn = footer.createEl("button", { cls: "calendar-editor-delete", text: "删除" });
+        this.deleteBtn.onclick = () => {
+            const event = this.getSelectedEvent();
+            if (event) void this.confirmAndDelete(event);
         };
-
-        this.submitBtn.onclick = () => {
-            void (async () => {
-                const title = this.textarea?.value.trim();
-                if (!title) return;
-
-                const calendar = calendarSelect.value;
-
-                if (!startTime || !endTime) {
-                    new Notice("请设置时间");
-                    return;
-                }
-
-                const startISO = startTime.toISOString();
-                const endISO = endTime.toISOString();
-
-                if (editingEventId) {
-                    await this.plugin.storage.updateEvent(editingEventId, calendar, title, startISO, endISO);
-                } else {
-                    await this.plugin.storage.createEvent(calendar, title, startISO, endISO);
-                }
-
-                this.resetComposer();
-                setDefaultTimes();
-                editingEventId = null;
-                await this.loadAndRender();
-            })();
+        const cancelBtn = footer.createEl("button", { cls: "calendar-editor-cancel", text: "取消" });
+        cancelBtn.onclick = () => this.closeInspector();
+        this.saveBtn = footer.createEl("button", { cls: "calendar-editor-save", text: "添加" });
+        this.saveBtn.onclick = () => {
+            void this.saveInspector();
         };
+    }
 
-        this.textarea.onkeydown = (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void this.submitBtn?.click();
-            } else if (e.key === "Escape" && editingEventId) {
-                e.preventDefault();
-                this.cancelBtn?.click();
-            } else if (e.key === "Escape") {
-                e.preventDefault();
-                this.textarea?.blur();
-            }
-        };
+    private renderMiniMonth(container: HTMLElement): void {
+        container.empty();
+        const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+        for (const day of weekdays) {
+            container.createDiv({ cls: "calendar-mini-weekday", text: day });
+        }
 
-        this.textarea.oninput = () => {
-            this.autoResizeTextarea();
-        };
+        const monthStart = new Date(this.currentDay.getFullYear(), this.currentDay.getMonth(), 1);
+        const gridStart = new Date(monthStart);
+        gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+        const selectedKey = this.getDateKey(this.currentDay);
+        const todayKey = this.getDateKey(new Date());
 
-        this.applyTimeSelection = (start: Date, end: Date) => {
-            startTime = start;
-            endTime = end;
-            updateTimeDisplay();
-            this.timeBtn?.addClass("active");
-            this.textarea?.focus();
-        };
+        for (let i = 0; i < 42; i++) {
+            const date = new Date(gridStart);
+            date.setDate(gridStart.getDate() + i);
+            const dateKey = this.getDateKey(date);
+            const classes = ["calendar-mini-day"];
+            if (date.getMonth() !== this.currentDay.getMonth()) classes.push("is-outside");
+            if (dateKey === selectedKey) classes.push("is-selected");
+            if (dateKey === todayKey) classes.push("is-today");
+            const button = container.createEl("button", { cls: classes.join(" "), text: String(date.getDate()) });
+            button.onclick = () => {
+                this.currentDay = new Date(date);
+                this.closeInspector();
+                this.renderMiniMonth(container);
+                void this.loadAndRender();
+            };
+        }
+    }
 
-        this.startEditEvent = (event: CalendarEvent) => {
-            editingEventId = event.id;
-            if (this.textarea) this.textarea.value = event.title;
+    private openInspector(mode: InspectorMode, event?: CalendarEvent): void {
+        if (event) {
+            this.selectedEventId = event.id;
+            this.draftStart = new Date(event.start);
+            this.draftEnd = new Date(event.end);
+            if (this.titleInput) this.titleInput.value = event.title;
+            if (this.locationInput) this.locationInput.value = event.location || "";
+            if (this.notesInput) this.notesInput.value = event.notes || "";
             if (this.calendarSelectRef) this.calendarSelectRef.value = event.calendar;
-            startTime = new Date(event.start);
-            endTime = new Date(event.end);
-            updateTimeDisplay();
-            this.timeBtn?.addClass("active");
-
-            if (this.statusHint) {
-                this.statusHint.textContent = "正在编辑事件";
-                this.statusHint.removeClass("is-hidden");
-            }
-            this.cancelBtn?.removeClass("is-hidden");
-            if (this.submitBtn) this.submitBtn.textContent = "保存";
-            if (this.textarea) {
-                this.textarea.placeholder = "编辑事件内容...";
-                this.textarea.focus();
-                this.textarea.setSelectionRange(this.textarea.value.length, this.textarea.value.length);
-            }
-            this.autoResizeTextarea();
-            this.containerEl.scrollTop = 0;
-        };
-
-        this.autoResizeTextarea();
-    }
-
-    private applyTimeSelection(_start: Date, _end: Date): void {
-        // assigned dynamically in renderInputArea
-    }
-
-    private autoResizeTextarea(): void {
-        if (!this.textarea) return;
-        this.textarea.style.height = "auto";
-        const maxHeight = 160;
-        this.textarea.style.height = `${Math.min(this.textarea.scrollHeight, maxHeight)}px`;
-    }
-
-    private resetComposer(): void {
-        if (this.textarea) {
-            this.textarea.value = "";
-            this.textarea.style.height = "auto";
-            this.textarea.placeholder = "添加日历事件...";
+        } else {
+            this.selectedEventId = null;
+            if (this.titleInput) this.titleInput.value = "";
+            if (this.locationInput) this.locationInput.value = "";
+            if (this.notesInput) this.notesInput.value = "";
         }
-        if (this.statusHint) {
-            this.statusHint.textContent = "";
-            this.statusHint.addClass("is-hidden");
+
+        if (this.inspectorModeEl) this.inspectorModeEl.setText(mode === "edit" ? "编辑日程" : "新建日程");
+        if (this.saveBtn) this.saveBtn.setText(mode === "edit" ? "保存" : "添加");
+        this.deleteBtn?.toggleClass("is-hidden", mode !== "edit");
+        this.shellEl?.addClass("has-inspector");
+        this.inspectorEl?.removeClass("is-hidden");
+        this.updateInspectorTime();
+        this.highlightSelectedEvent();
+        this.titleInput?.focus();
+        this.titleInput?.select();
+    }
+
+    private closeInspector(): void {
+        this.selectedEventId = null;
+        this.draftStart = null;
+        this.draftEnd = null;
+        this.shellEl?.removeClass("has-inspector");
+        this.inspectorEl?.addClass("is-hidden");
+        this.highlightSelectedEvent();
+    }
+
+    private updateInspectorTime(): void {
+        if (!this.timeTextEl || !this.draftStart || !this.draftEnd) return;
+        this.timeTextEl.setText(`${this.formatDateLong(this.draftStart)}  ${this.formatTime(this.draftStart.toISOString())} – ${this.formatTime(this.draftEnd.toISOString())}`);
+    }
+
+    private getSelectedEvent(): CalendarEvent | null {
+        if (!this.selectedEventId) return null;
+        return this.dayEvents.find((event) => event.id === this.selectedEventId) || null;
+    }
+
+    private highlightSelectedEvent(): void {
+        this.calendarContainer?.querySelectorAll(".calendar-dayview-event.is-selected").forEach((element) => {
+            element.removeClass("is-selected");
+        });
+        if (!this.selectedEventId) return;
+        this.calendarContainer?.querySelector(`[data-event-id="${CSS.escape(this.selectedEventId)}"]`)?.addClass("is-selected");
+    }
+
+    private async saveInspector(): Promise<void> {
+        const title = this.titleInput?.value.trim();
+        if (!title) {
+            new Notice("请输入日程标题");
+            return;
         }
-        this.timeDisplay?.empty();
-        this.timeDisplay?.addClass("is-hidden");
-        this.cancelBtn?.addClass("is-hidden");
-        this.timeBtn?.removeClass("active");
-        if (this.submitBtn) this.submitBtn.textContent = "添加事件";
+        if (!this.draftStart || !this.draftEnd) {
+            new Notice("请设置时间");
+            return;
+        }
+
+        const calendar = this.calendarSelectRef?.value || "";
+        const location = this.locationInput?.value.trim() || "";
+        const notes = this.notesInput?.value.trim() || "";
+        const startISO = this.draftStart.toISOString();
+        const endISO = this.draftEnd.toISOString();
+
+        if (this.selectedEventId) {
+            await this.plugin.storage.updateEvent(this.selectedEventId, calendar, title, startISO, endISO, location, notes);
+        } else {
+            await this.plugin.storage.createEvent(calendar, title, startISO, endISO, location, notes);
+        }
+
+        this.closeInspector();
+        await this.loadAndRender();
     }
 
     private showDateTimePicker(
@@ -296,73 +317,31 @@ export class CalendarView extends ItemView {
         modal.open();
     }
 
-    private renderEventsList(container: HTMLElement): void {
-        this.listContainer = container.createDiv("calendar-list-container");
-        this.listContainer.createDiv({ text: "加载中...", cls: "calendar-loading" });
+    private renderCalendar(container: HTMLElement): void {
+        this.calendarContainer = container.createDiv("calendar-main-container");
+        this.calendarContainer.createDiv({ text: "加载中...", cls: "calendar-loading" });
 
-        void this.plugin.storage.getEvents().then(({ events, calendars }) => {
-            if (!this.listContainer) return;
-            this.listContainer.empty();
-            this.renderEventsContent(events, calendars, this.listContainer);
+        void this.plugin.storage.getEvents().then(({ events }) => {
+            if (!this.calendarContainer) return;
+            this.calendarContainer.empty();
+            this.renderCalendarContent(events, this.calendarContainer);
         });
     }
 
     private async loadAndRender(): Promise<void> {
-        const { events, calendars } = await this.plugin.storage.getEvents();
-        this.renderEventsContent(events, calendars);
+        const { events } = await this.plugin.storage.getEvents();
+        this.renderCalendarContent(events);
     }
 
-    private renderEventsContent(
+    private renderCalendarContent(
         events: Record<string, CalendarEvent[]>,
-        _calendars: string[],
         container?: HTMLElement,
     ): void {
-        const listContainer = container || this.listContainer;
-        if (!listContainer) return;
+        const calendarContainer = container || this.calendarContainer;
+        if (!calendarContainer) return;
 
-        listContainer.empty();
-
-        const header = listContainer.createDiv("calendar-view-header");
-        const titleEl = header.createDiv("calendar-view-title");
-        titleEl.textContent = this.mode === "day" ? "日视图" : "日程列表";
-
-        const toggleGroup = header.createDiv("calendar-view-toggle");
-        const listBtn = toggleGroup.createEl("button", { cls: `calendar-toggle-btn ${this.mode === "list" ? "active" : ""}` });
-        setIcon(listBtn, "list");
-        listBtn.title = "列表视图";
-        const dayBtn = toggleGroup.createEl("button", { cls: `calendar-toggle-btn ${this.mode === "day" ? "active" : ""}` });
-        setIcon(dayBtn, "clock");
-        dayBtn.title = "日视图";
-
-        listBtn.onclick = () => {
-            if (this.mode === "list") return;
-            this.mode = "list";
-            void this.loadAndRender();
-        };
-        dayBtn.onclick = () => {
-            if (this.mode === "day") return;
-            this.mode = "day";
-            void this.loadAndRender();
-        };
-
-        if (this.mode === "day") {
-            this.renderDayView(listContainer, events);
-            return;
-        }
-
-        const days = this.plugin.storage.groupEventsByDay(events);
-
-        if (days.length === 0) {
-            const emptyState = listContainer.createDiv({ cls: "calendar-empty-state" });
-            emptyState.createDiv({ text: "📅", cls: "calendar-empty-empty-icon" });
-            emptyState.createDiv({ text: "未来3天没有日程", cls: "calendar-empty-title" });
-            emptyState.createDiv({ text: "在上方输入框开始添加", cls: "calendar-empty-desc" });
-            return;
-        }
-
-        for (const day of days) {
-            this.renderDayGroup(listContainer, day);
-        }
+        calendarContainer.empty();
+        this.renderDayView(calendarContainer, events);
     }
 
     private renderDayView(
@@ -386,41 +365,58 @@ export class CalendarView extends ItemView {
         }
         this.dayEvents = allEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
-        const dayHeader = container.createDiv("calendar-dayview-header");
-        const prevBtn = dayHeader.createEl("button", { cls: "calendar-dayview-nav" });
+        const topbar = container.createDiv("calendar-topbar");
+        const addBtn = topbar.createEl("button", { cls: "calendar-topbar-add", attr: { "aria-label": "新建日程" } });
+        setIcon(addBtn, "plus");
+        addBtn.onclick = () => {
+            const start = new Date(dayDate);
+            start.setHours(new Date().getHours() + 1, 0, 0, 0);
+            const end = new Date(start);
+            end.setHours(end.getHours() + 1);
+            this.draftStart = start;
+            this.draftEnd = end;
+            this.openInspector("create");
+        };
+
+        const titleBlock = topbar.createDiv("calendar-topbar-title");
+        titleBlock.createDiv({ cls: "calendar-topbar-date", text: this.formatLargeDate(dayDate) });
+        titleBlock.createDiv({ cls: "calendar-topbar-subtitle", text: this.formatWeekSubtitle(dayDate) });
+
+        const nav = topbar.createDiv("calendar-topbar-nav");
+        const prevBtn = nav.createEl("button", { cls: "calendar-dayview-nav", attr: { "aria-label": "前一天" } });
         setIcon(prevBtn, "chevron-left");
         prevBtn.onclick = () => {
             this.currentDay.setDate(this.currentDay.getDate() - 1);
+            this.closeInspector();
             void this.loadAndRender();
         };
-
-        const dateText = dayHeader.createDiv("calendar-dayview-date");
-        dateText.textContent = this.formatDateLong(dayDate);
-
-        const nextBtn = dayHeader.createEl("button", { cls: "calendar-dayview-nav" });
+        const todayBtn = nav.createEl("button", { cls: "calendar-dayview-today", text: "今天" });
+        todayBtn.onclick = () => {
+            this.currentDay = new Date();
+            this.closeInspector();
+            void this.loadAndRender();
+        };
+        const nextBtn = nav.createEl("button", { cls: "calendar-dayview-nav", attr: { "aria-label": "后一天" } });
         setIcon(nextBtn, "chevron-right");
         nextBtn.onclick = () => {
             this.currentDay.setDate(this.currentDay.getDate() + 1);
-            void this.loadAndRender();
-        };
-
-        const todayBtn = dayHeader.createEl("button", { cls: "calendar-dayview-today" });
-        todayBtn.textContent = "今天";
-        todayBtn.onclick = () => {
-            this.currentDay = new Date();
+            this.closeInspector();
             void this.loadAndRender();
         };
 
         const gridWrapper = container.createDiv("calendar-dayview-grid-wrapper");
-        this.dayViewContainer = gridWrapper;
         const grid = gridWrapper.createDiv("calendar-dayview-grid");
-        this.dayGridRef = grid;
 
         const slotsPerHour = 2;
         const slotMinutes = 60 / slotsPerHour;
+        const slotHeightPx = 48;
         const totalSlots = 24 * slotsPerHour;
         const showEarlyHours = this.plugin.settings.showEarlyHours;
         const startSlotOffset = showEarlyHours ? 0 : 6 * slotsPerHour;
+        grid.style.setProperty(
+            "--calendar-dayview-grid-height",
+            `${(totalSlots - startSlotOffset) * slotHeightPx}px`,
+        );
 
         const slotElements: HTMLElement[] = [];
         for (let i = startSlotOffset; i < totalSlots; i++) {
@@ -441,20 +437,50 @@ export class CalendarView extends ItemView {
             slotElements.push(track);
         }
 
-        this.renderDayEvents(grid, slotElements, slotsPerHour, slotMinutes, dayDate, startSlotOffset, totalSlots);
-        this.attachDayGridInteractions(grid, slotElements, slotsPerHour, slotMinutes, dayDate, startSlotOffset);
+        this.renderCurrentTimeIndicator(grid, slotHeightPx, slotMinutes, dayDate, startSlotOffset, slotElements.length);
+        this.renderDayEvents(grid, slotElements, slotMinutes, slotHeightPx, dayDate, startSlotOffset, totalSlots);
+        this.attachDayGridInteractions(grid, slotElements, slotMinutes, dayDate, startSlotOffset);
+    }
+
+    private renderCurrentTimeIndicator(
+        grid: HTMLElement,
+        slotHeightPx: number,
+        slotMinutes: number,
+        dayDate: Date,
+        startSlotOffset: number,
+        visibleSlots: number,
+    ): void {
+        const now = new Date();
+        if (this.getDateKey(now) !== this.getDateKey(dayDate)) return;
+        const minutes = now.getHours() * 60 + now.getMinutes();
+        const slot = minutes / slotMinutes - startSlotOffset;
+        if (slot < 0 || slot > visibleSlots) return;
+
+        const line = grid.createDiv("calendar-now-line");
+        line.style.top = `${slot * slotHeightPx}px`;
+        line.createSpan({ cls: "calendar-now-label", text: this.formatTime(now.toISOString()) });
     }
 
     private renderDayEvents(
         grid: HTMLElement,
         slotElements: HTMLElement[],
-        slotsPerHour: number,
         slotMinutes: number,
+        slotHeightPx: number,
         dayDate: Date,
         startSlotOffset: number,
         totalSlots: number,
     ): void {
         const dayStart = dayDate.getTime();
+
+        type EventLayout = {
+            event: CalendarEvent;
+            startSlot: number;
+            endSlot: number;
+            cluster: number;
+            column: number;
+        };
+
+        const layouts: EventLayout[] = [];
         for (const event of this.dayEvents) {
             const start = new Date(event.start);
             const end = new Date(event.end);
@@ -466,23 +492,76 @@ export class CalendarView extends ItemView {
             const endSlot = Math.min(slotElements.length, actualEndSlot - startSlotOffset);
             if (startSlot >= slotElements.length || endSlot <= 0) continue;
 
+            layouts.push({ event, startSlot, endSlot, cluster: 0, column: 0 });
+        }
+
+        layouts.sort((a, b) => a.startSlot - b.startSlot || a.endSlot - b.endSlot);
+
+        const clusters: { columns: number; layouts: EventLayout[] }[] = [];
+        let active: EventLayout[] = [];
+
+        for (const layout of layouts) {
+            active = active.filter((a) => a.endSlot > layout.startSlot);
+            if (active.length === 0) {
+                clusters.push({ columns: 0, layouts: [] });
+            }
+            const cluster = clusters[clusters.length - 1];
+            cluster.layouts.push(layout);
+            layout.cluster = clusters.length - 1;
+            active.push(layout);
+            cluster.columns = Math.max(cluster.columns, active.length);
+        }
+
+        for (const cluster of clusters) {
+            const assigned: EventLayout[] = [];
+            for (const layout of cluster.layouts) {
+                const usedColumns = new Set<number>();
+                for (const other of assigned) {
+                    if (other.endSlot > layout.startSlot && other.startSlot < layout.endSlot) {
+                        usedColumns.add(other.column);
+                    }
+                }
+                let col = 0;
+                while (usedColumns.has(col)) col++;
+                layout.column = col;
+                assigned.push(layout);
+            }
+        }
+
+        const labelWidth = 58;
+        const rightGap = 0;
+        const totalFixed = labelWidth + rightGap;
+        const gap = 6;
+
+        for (const layout of layouts) {
+            const cluster = clusters[layout.cluster];
+            const columns = cluster.columns || 1;
+            const unit = `((100% - ${totalFixed}px) / ${columns})`;
+            const left = `calc(${labelWidth}px + ${layout.column} * ${unit} + ${gap / 2}px)`;
+            const width = `calc(${unit} - ${gap}px)`;
+
             const eventEl = grid.createDiv("calendar-dayview-event");
-            const eventColor = this.getCalendarColor(event.calendar);
-            eventEl.textContent = event.title;
-            eventEl.title = `${event.title} · ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`;
-            eventEl.style.top = `${(startSlot / slotsPerHour) * 60}px`;
-            eventEl.style.height = `${((endSlot - startSlot) / slotsPerHour) * 60}px`;
+            const eventColor = this.getCalendarColor(layout.event.calendar);
+            eventEl.dataset.eventId = layout.event.id;
+            if (layout.event.id === this.selectedEventId) eventEl.addClass("is-selected");
+            eventEl.style.top = `${layout.startSlot * slotHeightPx}px`;
+            eventEl.style.height = `${(layout.endSlot - layout.startSlot) * slotHeightPx}px`;
+            eventEl.style.left = left;
+            eventEl.style.width = width;
             eventEl.style.background = eventColor;
             eventEl.style.color = this.getContrastColor(eventColor);
+            eventEl.title = `${layout.event.title} · ${this.formatTime(layout.event.start)} - ${this.formatTime(layout.event.end)}`;
+            eventEl.createDiv({ cls: "calendar-dayview-event-title", text: layout.event.title });
+            eventEl.createDiv({ cls: "calendar-dayview-event-time", text: `${this.formatTime(layout.event.start)} - ${this.formatTime(layout.event.end)}` });
 
             eventEl.onclick = (e) => {
                 e.stopPropagation();
-                this.startEditEvent?.(event);
+                this.openInspector("edit", layout.event);
             };
             eventEl.oncontextmenu = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                this.showContextMenu(e, event);
+                this.showContextMenu(e, layout.event);
             };
         }
     }
@@ -490,7 +569,6 @@ export class CalendarView extends ItemView {
     private attachDayGridInteractions(
         grid: HTMLElement,
         slotElements: HTMLElement[],
-        slotsPerHour: number,
         slotMinutes: number,
         dayDate: Date,
         startSlotOffset: number,
@@ -516,10 +594,11 @@ export class CalendarView extends ItemView {
 
         const slotFromY = (clientY: number): number => {
             const rect = grid.getBoundingClientRect();
-            const y = clientY - rect.top + grid.scrollTop;
+            const wrapper = grid.parentElement;
+            const scrollTop = wrapper ? wrapper.scrollTop : 0;
+            const y = clientY - rect.top + scrollTop;
             const slotHeight = rect.height / slotElements.length;
-            const visualSlot = Math.max(0, Math.min(slotElements.length - 1, Math.floor(y / slotHeight)));
-            return visualSlot + startSlotOffset;
+            return Math.max(0, Math.min(slotElements.length - 1, Math.floor(y / slotHeight)));
         };
 
         const commitSelection = () => {
@@ -528,15 +607,16 @@ export class CalendarView extends ItemView {
             if (maxSlot <= minSlot) return;
 
             const start = new Date(dayDate);
-            start.setHours(0, minSlot * slotMinutes, 0, 0);
+            start.setHours(0, (minSlot + startSlotOffset) * slotMinutes, 0, 0);
             const end = new Date(dayDate);
-            end.setHours(0, maxSlot * slotMinutes, 0, 0);
+            end.setHours(0, (maxSlot + startSlotOffset) * slotMinutes, 0, 0);
             if ((end.getTime() - start.getTime()) / (60 * 1000) < 30) {
                 end.setMinutes(start.getMinutes() + 30);
             }
 
-            this.daySelection = { start, end };
-            this.applyTimeSelection(start, end);
+            this.draftStart = start;
+            this.draftEnd = end;
+            this.openInspector("create");
             clearSelection();
         };
 
@@ -547,7 +627,6 @@ export class CalendarView extends ItemView {
             if (target.closest(".calendar-dayview-event")) return;
 
             this.isDragging = true;
-            this.dragStartY = e.clientY;
             const slot = slotFromY(e.clientY);
             this.dragStartSlot = slot;
             this.dragEndSlot = slot + 1;
@@ -576,106 +655,12 @@ export class CalendarView extends ItemView {
         });
     }
 
-    private renderDayGroup(
-        container: HTMLElement,
-        day: {
-            dateKey: string;
-            label: string;
-            events: CalendarEvent[];
-        },
-    ): void {
-        const dayGroup = container.createDiv("calendar-day-group");
-        const dayHeader = dayGroup.createDiv("calendar-day-header");
-        const isToday = day.label === "今天";
-        dayHeader.createSpan({
-            text: day.label,
-            cls: isToday ? "calendar-day-label-today" : "calendar-day-label",
-        });
-        dayHeader.createSpan({
-            text: `${day.events.length}`,
-            cls: "calendar-day-count",
-        });
-
-        const eventsList = dayGroup.createDiv("calendar-events-list");
-        for (const event of day.events) {
-            this.renderEventItem(eventsList, event);
-        }
-    }
-
-    private renderEventItem(container: HTMLElement, event: CalendarEvent): void {
-        const item = container.createDiv("calendar-event-item");
-        item.dataset.eventId = event.id;
-
-        const card = item.createDiv("calendar-event-card");
-
-        const cardHeader = card.createDiv("calendar-event-header");
-
-        const timeEl = cardHeader.createDiv("calendar-event-time");
-        if (event.allDay) {
-            timeEl.textContent = "全天";
-        } else {
-            timeEl.textContent = `${this.formatTime(event.start)} - ${this.formatTime(event.end)}`;
-        }
-
-        const calendarColor = this.getCalendarColor(event.calendar);
-
-        const calendarBadge = cardHeader.createDiv("calendar-event-badge");
-        calendarBadge.textContent = event.calendar;
-        calendarBadge.style.color = calendarColor;
-        calendarBadge.style.borderColor = calendarColor;
-        card.style.borderLeft = `3px solid ${calendarColor}`;
-
-        const cardActions = cardHeader.createDiv("calendar-event-actions");
-
-        const editBtn = cardActions.createEl("button", { cls: "calendar-action-btn" });
-        setIcon(editBtn, "pencil");
-        editBtn.title = "编辑";
-        editBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.startEditEvent?.(event);
-        };
-
-        const moreBtn = cardActions.createEl("button", { cls: "calendar-action-btn" });
-        setIcon(moreBtn, "more-horizontal");
-        moreBtn.title = "更多操作";
-        moreBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.showContextMenu(e, event);
-        };
-
-        const cardBody = card.createDiv("calendar-event-body");
-        cardBody.createDiv({ text: event.title, cls: "calendar-event-title" });
-
-        if (event.location || event.notes) {
-            const metaEl = cardBody.createDiv({ cls: "calendar-event-meta" });
-            if (event.location) {
-                const loc = metaEl.createDiv({ cls: "calendar-meta-row" });
-                setIcon(loc.createSpan(), "map-pin");
-                loc.createSpan({ text: event.location });
-            }
-            if (event.notes) {
-                const notes = metaEl.createDiv({ cls: "calendar-meta-row" });
-                setIcon(notes.createSpan(), "file-text");
-                notes.createSpan({ text: event.notes });
-            }
-        }
-
-        cardBody.onclick = () => {
-            this.startEditEvent?.(event);
-        };
-
-        card.oncontextmenu = (e) => {
-            e.preventDefault();
-            this.showContextMenu(e, event);
-        };
-    }
-
     private showContextMenu(e: MouseEvent, event: CalendarEvent): void {
         const menu = new Menu();
 
         menu.addItem((item) => {
             item.setTitle("编辑").setIcon("pencil").onClick(() => {
-                this.startEditEvent?.(event);
+                this.openInspector("edit", event);
             });
         });
 
@@ -692,7 +677,7 @@ export class CalendarView extends ItemView {
         const confirmed = await new Promise<boolean>((resolve) => {
             const modal = new Modal(this.app);
             modal.titleEl.setText("确认删除");
-            modal.contentEl.createEl("p", { text: `确定删除事件"${event.title}"吗？` });
+            modal.contentEl.createEl("p", { text: `确定删除事件\"${event.title}\"吗？` });
             const btnGroup = modal.contentEl.createDiv({ cls: "calendar-modal-actions" });
             btnGroup.createEl("button", { text: "取消", cls: "calendar-modal-btn" }).onclick = () => {
                 modal.close();
@@ -708,6 +693,7 @@ export class CalendarView extends ItemView {
 
         if (confirmed) {
             await this.plugin.storage.deleteEvent(event.id);
+            this.closeInspector();
             await this.loadAndRender();
         }
     }
@@ -719,20 +705,34 @@ export class CalendarView extends ItemView {
         return `${hour}:${minute}`;
     }
 
-    private formatDateTime(date: Date): string {
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        const hour = String(date.getHours()).padStart(2, "0");
-        const minute = String(date.getMinutes()).padStart(2, "0");
-        return `${month}-${day} ${hour}:${minute}`;
+    private formatMonthTitle(date: Date): string {
+        return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+    }
+
+    private formatLargeDate(date: Date): string {
+        return `${date.getFullYear()}年 ${date.getMonth() + 1}月${date.getDate()}日`;
     }
 
     private formatDateLong(date: Date): string {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");
-        const weekDays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+        const weekDays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
         const weekDay = weekDays[date.getDay()];
         return `${year}年${month}月${day}日 ${weekDay}`;
+    }
+
+    private formatWeekSubtitle(date: Date): string {
+        const weekDays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+        const firstDay = new Date(date.getFullYear(), 0, 1);
+        const week = Math.ceil((((date.getTime() - firstDay.getTime()) / 86400000) + firstDay.getDay() + 1) / 7);
+        return `${weekDays[date.getDay()]}，第 ${week} 周`;
+    }
+
+    private getDateKey(date: Date): string {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
     }
 }

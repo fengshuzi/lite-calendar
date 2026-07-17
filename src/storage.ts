@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { Notice, Platform } from "obsidian";
 import type { CalendarEvent } from "./types";
 
@@ -9,9 +9,14 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-const execAsync = (command: string, options: { timeout: number }): Promise<string> => {
+const EXEC_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+
+const execAsync = (
+  script: string,
+  options: { timeout: number; maxBuffer?: number },
+): Promise<string> => {
     return new Promise<string>((resolve, reject) => {
-        exec(command, options, (err: unknown, stdout: unknown) => {
+        execFile("osascript", ["-l", "JavaScript", "-e", script], options, (err: unknown, stdout: unknown) => {
             if (err) {
                 reject(err instanceof Error ? err : new Error(String(err)));
                 return;
@@ -45,10 +50,10 @@ export class CalendarStorage {
     if (!this.checkMacOS()) return null;
 
     try {
-      const stdout = await execAsync(
-        `osascript -l JavaScript -e '${script}'`,
-        { timeout: 60000 },
-      );
+      const stdout = await execAsync(script, {
+        timeout: 60000,
+        maxBuffer: EXEC_MAX_BUFFER_BYTES,
+      });
       return stdout.trim();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -136,14 +141,17 @@ export class CalendarStorage {
     events: Record<string, CalendarEvent[]>;
     calendars: string[];
   }> {
-    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var now=$.NSDate.date;var end=now.dateByAddingTimeInterval(3*24*60*60);var cals=store.calendarsForEntityType(0);var calNames=[];var events={};for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);var name=ObjC.unwrap(cal.title);calNames.push(name);}var predicate=store.predicateForEventsWithStartDateEndDateCalendars(now,end,cals);var allEvents=store.eventsMatchingPredicate(predicate);for(var i=0;i<allEvents.count;i++){var e=allEvents.objectAtIndex(i);var calName=ObjC.unwrap(e.calendar.title);if(!events[calName])events[calName]=[];events[calName].push({title:ObjC.unwrap(e.title),id:ObjC.unwrap(e.calendarItemIdentifier),start:ObjC.unwrap(e.startDate).toISOString(),end:ObjC.unwrap(e.endDate).toISOString(),allDay:e.isAllDay,location:e.location?ObjC.unwrap(e.location):null,notes:e.notes?ObjC.unwrap(e.notes):null});}for(var k in events){events[k].sort(function(a,b){return new Date(a.start)-new Date(b.start);});}JSON.stringify({events:events,calendars:calNames});`;
+    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var now=$.NSDate.date;var start=$.NSCalendar.currentCalendar.startOfDayForDate(now);var end=start.dateByAddingTimeInterval(3*24*60*60);var cals=store.calendarsForEntityType(0);var calNames=[];var events={};for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);var name=ObjC.unwrap(cal.title);calNames.push(name);}var predicate=store.predicateForEventsWithStartDateEndDateCalendars(start,end,cals);var allEvents=store.eventsMatchingPredicate(predicate);for(var i=0;i<allEvents.count;i++){var e=allEvents.objectAtIndex(i);var calName=ObjC.unwrap(e.calendar.title);if(!events[calName])events[calName]=[];events[calName].push({title:ObjC.unwrap(e.title),id:ObjC.unwrap(e.calendarItemIdentifier),start:ObjC.unwrap(e.startDate).toISOString(),end:ObjC.unwrap(e.endDate).toISOString(),allDay:e.isAllDay,location:e.location?ObjC.unwrap(e.location):null,notes:e.notes?ObjC.unwrap(e.notes):null});}for(var k in events){events[k].sort(function(a,b){return new Date(a.start)-new Date(b.start);});}JSON.stringify({events:events,calendars:calNames});`;
 
     const result = await this.runJXA(script);
-    if (!result) return { events: {}, calendars: [] };
+    if (!result) {
+      return { events: {}, calendars: [] };
+    }
 
     try {
       return this.parseEventsResult(result);
-    } catch {
+    } catch (err) {
+      console.warn("[Calendar] getEvents parse error:", err);
       return { events: {}, calendars: [] };
     }
   }
@@ -165,11 +173,15 @@ export class CalendarStorage {
     title: string,
     startISO: string,
     endISO: string,
+    location = "",
+    notes = "",
   ): Promise<boolean> {
     const calName = this.escapeJXA(calendarName);
     const titleEsc = this.escapeJXA(title);
+    const locationEsc = this.escapeJXA(location);
+    const notesEsc = this.escapeJXA(notes);
 
-    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var cals=store.calendarsForEntityType(0);var targetCal=null;for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);if(ObjC.unwrap(cal.title)==="${calName}"){targetCal=cal;break;}}if(!targetCal){var names=[];for(var i=0;i<cals.count;i++){names.push(ObjC.unwrap(cals.objectAtIndex(i).title));}"calendar not found. Available: "+names.join(", ");}else{var event=$.EKEvent.eventWithEventStore(store);event.title=$("${titleEsc}");event.startDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${startISO}").getTime()/1000);event.endDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${endISO}").getTime()/1000);event.calendar=targetCal;var error=$();store.saveEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
+    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var cals=store.calendarsForEntityType(0);var targetCal=null;for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);if(ObjC.unwrap(cal.title)==="${calName}"){targetCal=cal;break;}}if(!targetCal){var names=[];for(var i=0;i<cals.count;i++){names.push(ObjC.unwrap(cals.objectAtIndex(i).title));}"calendar not found. Available: "+names.join(", ");}else{var event=$.EKEvent.eventWithEventStore(store);event.title=$("${titleEsc}");event.startDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${startISO}").getTime()/1000);event.endDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${endISO}").getTime()/1000);event.calendar=targetCal;event.location=$("${locationEsc}");event.notes=$("${notesEsc}");var error=$();store.saveEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
 
     const result = await this.runJXA(script);
     if (result === "ok") {
@@ -200,11 +212,15 @@ export class CalendarStorage {
     title: string,
     startISO: string,
     endISO: string,
+    location = "",
+    notes = "",
   ): Promise<boolean> {
     const titleEsc = this.escapeJXA(title);
     const calNameEsc = this.escapeJXA(calendarName);
+    const locationEsc = this.escapeJXA(location);
+    const notesEsc = this.escapeJXA(notes);
 
-    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var cals=store.calendarsForEntityType(0);var targetCal=null;for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);if(ObjC.unwrap(cal.title)==="${calNameEsc}"){targetCal=cal;break;}}var event=store.eventWithIdentifier("${eventId}");if(!event){"event not found";}else{event.title=$("${titleEsc}");event.startDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${startISO}").getTime()/1000);event.endDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${endISO}").getTime()/1000);if(targetCal){event.calendar=targetCal;}var error=$();store.saveEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
+    const script = `ObjC.import("EventKit");var store=$.EKEventStore.alloc.init;var status=$.EKEventStore.authorizationStatusForEntityType(0);if(status!=3){store.requestAccessToEntityTypeCompletion(0,null);delay(2);}var cals=store.calendarsForEntityType(0);var targetCal=null;for(var i=0;i<cals.count;i++){var cal=cals.objectAtIndex(i);if(ObjC.unwrap(cal.title)==="${calNameEsc}"){targetCal=cal;break;}}var event=store.eventWithIdentifier("${eventId}");if(!event){"event not found";}else{event.title=$("${titleEsc}");event.startDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${startISO}").getTime()/1000);event.endDate=$.NSDate.dateWithTimeIntervalSince1970(new Date("${endISO}").getTime()/1000);if(targetCal){event.calendar=targetCal;}event.location=$("${locationEsc}");event.notes=$("${notesEsc}");var error=$();store.saveEventSpanCommitError(event,0,true,error);error.js?error.js.localizedDescription:"ok";}`;
 
     const result = await this.runJXA(script);
     if (result === "ok") {
